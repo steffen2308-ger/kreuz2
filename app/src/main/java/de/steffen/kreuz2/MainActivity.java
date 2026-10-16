@@ -47,13 +47,13 @@ public class MainActivity extends Activity {
     private ClueSearch.Reader clueReader = new ClueSearch.OnDeviceReader();
     private int lastTouchedCell = -1;
     private PuzzleView board;
-    private TextView status, position;
+    private TextView status;
     private EditText keyboard, columnsInput, rowsInput;
     private DirectionIndicator directionIndicator;
     private String compositionBase;
     private LinearLayout cropPanel;
     private ProgressBar progress;
-    private Button openButton, savedButton, saveButton, moreButton, directionButton, undoButton;
+    private Button openButton, moreButton, undoButton;
     private CheckBox gridCheck, autoCheck;
     private boolean busy, destroyed, changingControls, editingCrop;
     private int revision, savedRevision = -1;
@@ -85,35 +85,28 @@ public class MainActivity extends Activity {
         TextView view = new TextView(this); view.setText(value); view.setTextSize(sp); view.setTextColor(0xff163c4c); return view;
     }
     private Button button(String label, LinearLayout parent, View.OnClickListener action) {
-        Button b = new Button(this); b.setText(label); b.setTextSize(12); b.setMinWidth(0); b.setMinimumWidth(0);
-        b.setPadding(dp(10), 0, dp(10), 0); b.setOnClickListener(action); parent.addView(b, new LinearLayout.LayoutParams(-2, dp(44))); return b;
+        Button b = new Button(this); b.setText(label); b.setTextSize(11); b.setAllCaps(false); b.setMinHeight(0); b.setMinimumHeight(0); b.setMinWidth(0); b.setMinimumWidth(0);
+        b.setPadding(dp(7), 0, dp(7), 0); b.setOnClickListener(action); parent.addView(b, new LinearLayout.LayoutParams(-2, dp(34))); return b;
     }
     private void buildUi() {
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(0xfff6f9fa);
-        root.setPadding(dp(8), dp(4), dp(8), dp(4));
+        root.setPadding(dp(2), 0, dp(2), 0);
         root.setOnApplyWindowInsetsListener((v, insets) -> {
-            v.setPadding(dp(8) + insets.getSystemWindowInsetLeft(), dp(4) + insets.getSystemWindowInsetTop(),
-                    dp(8) + insets.getSystemWindowInsetRight(), dp(4) + insets.getSystemWindowInsetBottom());
+            v.setPadding(dp(2) + insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(),
+                    dp(2) + insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
             return insets.consumeSystemWindowInsets();
         });
         HorizontalScrollView actionsScroll = new HorizontalScrollView(this); actionsScroll.setHorizontalScrollBarEnabled(false);
         LinearLayout actions = row(); actionsScroll.addView(actions); root.addView(actionsScroll);
         openButton = button("Bild öffnen", actions, v -> openFile(false));
-        savedButton = button("Spielstände", actions, v -> savedGames());
-        saveButton = button("Speichern", actions, v -> nameAndSave());
-        moreButton = button("Mehr ⋮", actions, this::more);
-        HorizontalScrollView optionsScroll = new HorizontalScrollView(this); optionsScroll.setHorizontalScrollBarEnabled(false);
-        LinearLayout options = row(); optionsScroll.addView(options); root.addView(optionsScroll);
-        directionButton = button(DIRECTIONS[0], options, v -> {
-            toggleDirection();
-        });
-        directionButton.setOnLongClickListener(v -> { chooseDirection(); return true; });
-        autoCheck = new CheckBox(this); autoCheck.setText("Auto"); autoCheck.setTextSize(13); options.addView(autoCheck);
+        LinearLayout options = actions;
+        autoCheck = new CheckBox(this); autoCheck.setText("Auto"); autoCheck.setTextSize(11); autoCheck.setMinHeight(0); autoCheck.setPadding(0, 0, dp(2), 0); options.addView(autoCheck, new LinearLayout.LayoutParams(-2, dp(34)));
         autoCheck.setOnCheckedChangeListener((v, checked) -> { if (!changingControls && puzzle != null) { finishInput(); puzzle.automatic = checked; changed(); } });
-        gridCheck = new CheckBox(this); gridCheck.setText("Linien"); gridCheck.setTextSize(13); options.addView(gridCheck);
+        gridCheck = new CheckBox(this); gridCheck.setText("Linien"); gridCheck.setTextSize(11); gridCheck.setMinHeight(0); gridCheck.setPadding(0, 0, dp(2), 0); options.addView(gridCheck, new LinearLayout.LayoutParams(-2, dp(34)));
         gridCheck.setOnCheckedChangeListener((v, checked) -> { if (!changingControls && puzzle != null) { finishInput(); puzzle.showGrid = checked; changed(); } });
-        undoButton = button("↶ Zurück", options, v -> undo());
-        status = text("Ein Bild öffnen oder einen Spielstand importieren.", 12); status.setPadding(dp(4), dp(3), dp(4), dp(4)); root.addView(status);
+        undoButton = button("↶", options, v -> undo()); undoButton.setContentDescription("Letzte Eingabe rückgängig machen");
+        moreButton = button("Mehr ⋮", options, this::more);
+        status = text("Bild öffnen · Fragetext 2 Sek. halten: Google", 11); status.setSingleLine(true); status.setEllipsize(android.text.TextUtils.TruncateAt.END); status.setPadding(dp(4), 0, dp(4), 0);
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal); progress.setIndeterminate(true); progress.setVisibility(View.GONE);
         root.addView(progress, new LinearLayout.LayoutParams(-1, dp(3)));
         board = new PuzzleView(this); root.addView(board, new LinearLayout.LayoutParams(-1, 0, 1));
@@ -146,14 +139,11 @@ public class MainActivity extends Activity {
             }
         };
         columnsInput.addTextChangedListener(preview); rowsInput.addTextChangedListener(preview);
-        LinearLayout directionRow = row();
+        LinearLayout typing = row();
         directionIndicator = new DirectionIndicator(this);
         directionIndicator.setOnClickListener(v -> toggleDirection());
         directionIndicator.setOnLongClickListener(v -> { chooseDirection(); return true; });
-        directionRow.addView(directionIndicator, new LinearLayout.LayoutParams(dp(64), dp(56)));
-        position = text("Fragetext 2 Sek. halten: Google-Suche", 14); position.setPadding(dp(8), dp(4), 0, dp(2));
-        directionRow.addView(position, new LinearLayout.LayoutParams(0, -2, 1)); root.addView(directionRow);
-        LinearLayout typing = row();
+        typing.addView(directionIndicator, new LinearLayout.LayoutParams(dp(48), dp(48)));
         LetterInput letterInput = new LetterInput(this);
         keyboard = letterInput;
         letterInput.setListener(new LetterInput.Listener() {
@@ -178,7 +168,7 @@ public class MainActivity extends Activity {
             }
             return false;
         });
-        typing.addView(keyboard, new LinearLayout.LayoutParams(0, dp(48), 1)); button("⌫", typing, v -> erase()); root.addView(typing);
+        typing.addView(keyboard, new LinearLayout.LayoutParams(0, dp(48), 1)); button("⌫", typing, v -> erase()); root.addView(typing); root.addView(status, new LinearLayout.LayoutParams(-1, dp(16)));
         setContentView(root); refresh();
     }
     private EditText numberInput(String label, LinearLayout parent) {
@@ -193,20 +183,17 @@ public class MainActivity extends Activity {
     }
     private void refresh() {
         boolean has = puzzle != null;
-        openButton.setEnabled(!busy && !editingCrop); savedButton.setEnabled(!busy && !editingCrop); moreButton.setEnabled(!busy && !editingCrop);
-        saveButton.setEnabled(has && !busy && !editingCrop); directionButton.setEnabled(has && !busy && !editingCrop);
+        openButton.setEnabled(!busy && !editingCrop); moreButton.setEnabled(!busy && !editingCrop);
         autoCheck.setEnabled(has && !busy && !editingCrop); gridCheck.setEnabled(has && !busy && !editingCrop);
         keyboard.setEnabled(has && !busy && !editingCrop); undoButton.setEnabled(!history.isEmpty() && !busy && !editingCrop);
         directionIndicator.setEnabled(has && !busy && !editingCrop);
         board.setEnabled(!busy);
         changingControls = true; autoCheck.setChecked(has && puzzle.automatic); gridCheck.setChecked(has && puzzle.showGrid); changingControls = false;
         if (has) {
-            directionButton.setText(DIRECTIONS[puzzle.direction]);
             directionIndicator.setDirection(puzzle.direction);
-            if (!busy) status.setText(puzzle.cols + " Spalten × " + puzzle.rows + " Zeilen · " + puzzle.filled() + " Buchstaben · "
-                    + (revision == savedRevision ? "lokal gespeichert" : "wird gespeichert"));
-            position.setText(puzzle.open(puzzle.selected) ? "Zeile " + (puzzle.selected / puzzle.cols + 1) + ", Spalte " + (puzzle.selected % puzzle.cols + 1)
-                    + " · " + DIRECTIONS[puzzle.direction] : "Fragetext 2 Sek. halten: Google-Suche");
+            if (!busy) status.setText(puzzle.cols + " Sp. × " + puzzle.rows + " Z. · " + puzzle.filled() + " Buchst."
+                    + (puzzle.open(puzzle.selected) ? " · Z" + (puzzle.selected / puzzle.cols + 1) + "/S" + (puzzle.selected % puzzle.cols + 1) : "")
+                    + (revision == savedRevision ? " · gespeichert" : " · speichert …"));
         }
         board.invalidate();
     }
@@ -270,9 +257,10 @@ public class MainActivity extends Activity {
     private void more(View anchor) {
         finishInput();
         PopupMenu menu = new PopupMenu(this, anchor);
-        String[] labels = {"Raster korrigieren", "Automatisch neu erkennen", "Ansicht einpassen", "Spielstand exportieren", "Spielstand importieren", "Hilfe", "Feldtyp/Pfeil bearbeiten"};
+        String[] labels = {"Raster korrigieren", "Automatisch neu erkennen", "Ansicht einpassen", "Spielstand exportieren", "Spielstand importieren", "Hilfe", "Feldtyp/Pfeil bearbeiten", "Spielstand speichern", "Spielstände öffnen"};
         for (int i = 0; i < labels.length; i++) menu.getMenu().add(0, i, i, labels[i]).setEnabled(i >= 4 || puzzle != null);
         menu.getMenu().findItem(6).setEnabled(puzzle != null && (lastTouchedCell >= 0 || puzzle.selected >= 0));
+        menu.getMenu().findItem(7).setEnabled(puzzle != null);
         menu.setOnMenuItemClickListener(item -> {
             switch (item.getItemId()) {
                 case 0: startCrop(); break;
@@ -282,6 +270,8 @@ public class MainActivity extends Activity {
                 case 3: export(); break;
                 case 4: openFile(true); break;
                 case 6: editCell(lastTouchedCell >= 0 ? lastTouchedCell : puzzle.selected); break;
+                case 7: nameAndSave(); break;
+                case 8: savedGames(); break;
                 default: help();
             }
             return true;
@@ -522,7 +512,7 @@ public class MainActivity extends Activity {
     }
     private void help() {
         new AlertDialog.Builder(this).setTitle("So füllst du dein Rätsel aus")
-                .setMessage("1. Bild öffnen: Wähle einen geraden Screenshot mit sichtbaren Rasterlinien.\n\n2. Prüfe die erkannte Anzahl und schalte Linien ein. Orange markiert Hinweisfelder, rot gesperrte Felder. Unter Mehr → Raster korrigieren kannst du die Ecken und die Anzahl anpassen.\n\n3. Tippe ein freies Feld an und schreibe mit der Tastatur. Nochmals antippen oder die Richtungstaste wechselt waagerecht/senkrecht. Lange auf die Richtungstaste drücken bietet alle vier Richtungen.\n\n4. Auto folgt erkannten Pfeilen aus benachbarten Hinweisfeldern und setzt am Wortende nach unten bzw. rechts fort. Auto ausschalten hält deine Richtung fest. Kleine Pfeile und Hinweistext werden nur anhand ihrer Bildform erkannt; kein zuverlässiges Lesen aller Rätselarten. Ein Feld antippen und Mehr → Feldtyp/Pfeil bearbeiten öffnet die Korrektur.\n\n5. Mit zwei Fingern vergrößern, mit einem Finger verschieben. ↶ macht Eingaben oder Korrekturen rückgängig.\n\n6. Spielstände werden automatisch lokal gespeichert. Speichern vergibt einen Namen. Mehr → Spielstand exportieren speichert eine Datei inklusive Bild; diese lässt sich später importieren. Lokale Spielstände gehen beim Deinstallieren verloren.\n\n7. Einen Fragetext zwei Sekunden gedrückt halten: Die App liest den Ausschnitt lokal und öffnet Google mit dem Fragetext plus Kreuzworträtsel Lösung. Bei unleserlichem Text kannst du die Suchfrage eingeben. Für Google wird Internet benötigt; der Bildausschnitt wird nicht hochgeladen.\n\nDie App trägt keine gefundenen Lösungen automatisch ein.")
+                .setMessage("1. Bild öffnen: Wähle einen geraden Screenshot mit sichtbaren Rasterlinien.\n\n2. Prüfe die erkannte Anzahl und schalte Linien ein. Orange markiert Hinweisfelder, rot gesperrte Felder. Unter Mehr → Raster korrigieren kannst du die Ecken und die Anzahl anpassen.\n\n3. Tippe ein freies Feld an und schreibe mit der Tastatur. Nochmals antippen oder der große Pfeil wechselt waagerecht/senkrecht. Lange auf den Pfeil drücken bietet alle vier Richtungen.\n\n4. Auto folgt erkannten Pfeilen aus benachbarten Hinweisfeldern und setzt am Wortende nach unten bzw. rechts fort. Auto ausschalten hält deine Richtung fest. Kleine Pfeile und Hinweistext werden nur anhand ihrer Bildform erkannt; kein zuverlässiges Lesen aller Rätselarten. Ein Feld antippen und Mehr → Feldtyp/Pfeil bearbeiten öffnet die Korrektur.\n\n5. Mit zwei Fingern vergrößern, mit einem Finger verschieben. ↶ macht Eingaben oder Korrekturen rückgängig.\n\n6. Spielstände werden automatisch lokal gespeichert. Mehr → Spielstand speichern vergibt einen Namen. Mehr → Spielstand exportieren speichert eine Datei inklusive Bild; diese lässt sich später importieren. Lokale Spielstände gehen beim Deinstallieren verloren.\n\n7. Einen Fragetext zwei Sekunden gedrückt halten: Die App liest den Ausschnitt lokal und öffnet Google mit dem Fragetext plus Kreuzworträtsel Lösung. Bei unleserlichem Text kannst du die Suchfrage eingeben. Für Google wird Internet benötigt; der Bildausschnitt wird nicht hochgeladen.\n\nDie App trägt keine gefundenen Lösungen automatisch ein.")
                 .setPositiveButton("Verstanden", null).show();
     }
     private void hideKeyboard() {

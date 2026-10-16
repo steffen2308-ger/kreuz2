@@ -18,6 +18,22 @@ import static org.junit.Assert.*;
 @RunWith(org.robolectric.RobolectricTestRunner.class)
 @Config(sdk = 28)
 public class EditorInteractionTest {
+    @Test public void compactControlsLeaveMostOfTheScreenForThePuzzle() throws Exception {
+        ActivityController<MainActivity> c = editor();
+        try {
+            android.view.ViewGroup content = c.get().findViewById(android.R.id.content);
+            android.view.View root = content.getChildAt(0);
+            float density = c.get().getResources().getDisplayMetrics().density;
+            int width = Math.round(360 * density), height = Math.round(640 * density);
+            root.measure(android.view.View.MeasureSpec.makeMeasureSpec(width, android.view.View.MeasureSpec.EXACTLY),
+                    android.view.View.MeasureSpec.makeMeasureSpec(height, android.view.View.MeasureSpec.EXACTLY));
+            root.layout(0, 0, width, height);
+            PuzzleView board = (PuzzleView) field(c.get(), "board");
+            assertTrue("Puzzle area should use at least 80% of the screen before system insets/keyboard", board.getHeight() >= height * .80);
+            DirectionIndicator arrow = (DirectionIndicator) field(c.get(), "directionIndicator");
+            assertTrue("Direction arrow must stay clearly visible", arrow.getHeight() >= 44 * density);
+        } finally { c.pause().stop().destroy(); }
+    }
     private Object field(MainActivity activity, String name) throws Exception {
         Field f = MainActivity.class.getDeclaredField(name); f.setAccessible(true); return f.get(activity);
     }
