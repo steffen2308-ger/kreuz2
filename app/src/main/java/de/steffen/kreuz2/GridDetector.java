@@ -5,14 +5,18 @@ package de.steffen.kreuz2;
 public final class GridDetector {
     private final int width, height;
     private final boolean[] ink;
+    private final boolean[] lineInk;
     public GridDetector(int[] pixels, int width, int height) {
         this.width = width; this.height = height;
         ink = new boolean[pixels.length];
+        lineInk = new boolean[pixels.length];
         int[] gray = new int[pixels.length];
         for (int i = 0; i < pixels.length; i++) {
             int c = pixels[i], alpha = c >>> 24;
             int luminance = (((c >> 16) & 255) * 30 + ((c >> 8) & 255) * 59 + (c & 255) * 11) / 100;
             gray[i] = (luminance * alpha + 255 * (255 - alpha)) / 255;
+            // Keep light clue-cell shading out of text/black-cell classification.
+            ink[i] = gray[i] < 155;
         }
         // Local paper brightness keeps pale/colored grid lines visible on uneven backgrounds.
         int tile = 48;
@@ -25,14 +29,14 @@ public final class GridDetector {
             for (int v = 0; v < 256; v++) { sum += histogram[v]; if (sum >= count * .85) { paper = v; break; } }
             int threshold = Math.min(245, paper - 12);
             for (int y = top; y < Math.min(height, top + tile); y++) for (int x = left; x < Math.min(width, left + tile); x++) {
-                int at = y * width + x; ink[at] = gray[at] < 96 || gray[at] <= threshold;
+                int at = y * width + x; lineInk[at] = gray[at] < 96 || gray[at] <= threshold;
             }
         }
     }
     private boolean dark(int x, int y) { return x >= 0 && y >= 0 && x < width && y < height && ink[y * width + x]; }
 
     public Puzzle detect() {
-        Puzzle result = new GridLocator(ink, width, height).locate();
+        Puzzle result = new GridLocator(lineInk, width, height).locate();
         if (result != null) classify(result);
         return result;
     }

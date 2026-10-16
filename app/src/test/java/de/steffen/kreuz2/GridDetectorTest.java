@@ -53,4 +53,11 @@ public class GridDetectorTest {
         Puzzle result = new GridDetector(p, w, h).detect(); assertNotNull(result);
         for (int arrow : result.arrows) assertEquals(0, arrow);
     }
+    @Test public void lightShadingDoesNotTurnAClueCellIntoABlackCell() {
+        int[] p = image(); grid(p, 40, 100, 10, 10, 50, 50, 0xff333333);
+        box(p, 41, 101, 89, 149, 0xffd2d2d2);
+        box(p, 49, 112, 78, 115, 0xff222222); box(p, 49, 125, 81, 128, 0xff222222);
+        Puzzle result = new GridDetector(p, w, h).detect(); assertNotNull(result);
+        assertEquals(10, result.cols); assertEquals(10, result.rows); assertEquals(Puzzle.CLUE, result.types[0]);
+    }
 }
