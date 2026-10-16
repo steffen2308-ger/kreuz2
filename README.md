@@ -8,6 +8,10 @@ Unter **Actions → Android APK** den neuesten erfolgreichen Lauf öffnen. Bei *
 
 Ab dieser Version verwendet die Test-App einen festen, bewusst öffentlichen Entwicklungsschlüssel (`app/debug.keystore`, Passwort `android`). Dadurch lassen sich spätere Testversionen über diese Version installieren, ohne die Spielstände zu verlieren. Der Schlüssel ist nicht für eine Veröffentlichung bestimmt. Eine zuvor installierte Hello-World-APK wurde noch mit einem anderen Schlüssel gebaut und muss einmal deinstalliert werden, falls Android das Update deshalb ablehnt.
 
+## App-Icon
+
+Ein türkisfarbenes Kreuzworträtsel-Icon mit goldenem Stift. Android 8+ verwendet ein adaptives Icon für verschiedene Launcher-Formen, Android 13+ unterstützt zusätzlich einfarbige Themen-Icons. Für ältere Geräte ist ein Vektor-Icon mit abgerundetem Hintergrund enthalten.
+
 ## Kompakte Oberfläche
 
 Keine Überschrift. Eine 34-dp-Werkzeugleiste enthält Bild öffnen, Auto, Linien, Rückgängig und Mehr. Der große Richtungspfeil sitzt direkt neben der Tastatureingabe in einer gemeinsamen 48-dp-Zeile. Spielstände und Speichern sind unter Mehr erreichbar. Eine einzelne schmale Statuszeile zeigt Zeilen/Spalten, Auswahl und Speicherstatus. Dadurch bleibt deutlich mehr Bildschirmhöhe für das Rätsel.
@@ -24,7 +28,7 @@ Keine Überschrift. Eine 34-dp-Werkzeugleiste enthält Bild öffnen, Auto, Linie
 
 ## Fragetext in Google suchen
 
-Einen Fragetext ungefähr **zwei Sekunden gedrückt halten**. Sobald das Handy kurz vibriert, wird der Text dieses Feldes lokal erkannt und Google im Browser mit `Fragetext Kreuzworträtsel Lösung` geöffnet. Du musst dazu nicht erst loslassen. Kurzes Tippen bleibt für die Eingabe; Verschieben, Zoomen und Loslassen vor zwei Sekunden brechen das Halten ab.
+Einen Fragetext ungefähr **eine Sekunde gedrückt halten**. Sobald das Handy kurz vibriert, wird der Text dieses Feldes lokal erkannt und Google im Browser mit `Fragetext Kreuzworträtsel Lösung` geöffnet. Du musst dazu nicht erst loslassen. Kurzes Tippen bleibt für die Eingabe; Verschieben, Zoomen und Loslassen vor Ablauf einer Sekunde brechen das Halten ab.
 
 Das OCR-Modell steckt in der APK und braucht keinen separaten Modelldownload. Der Screenshot wird nicht als Suchbild hochgeladen. Nur der erkannte Suchtext wird an Google übergeben. Bei zu kleinem/unleserlichem Text oder einem Erkennungsfehler erscheint ein Eingabefeld für die Suchfrage; dort ist auch die Feldkorrektur erreichbar. Schwarze Felder öffnen beim Halten weiterhin ihre Feldkorrektur. Bei einem in mehrere Fragen geteilten Hinweisfeld kannst du den gewünschten Suchtext über den Browser anpassen. Google-Ergebnisse werden nicht automatisch in das Rätsel eingetragen.
 

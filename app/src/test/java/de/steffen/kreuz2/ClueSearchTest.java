@@ -40,11 +40,11 @@ public class ClueSearchTest {
         view.onTouchEvent(event); event.recycle();
     }
     private void idle(long ms) { Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(ms)); }
-    @Test public void holdsForTwoSecondsAndSearchesOnceBeforeRelease() {
+    @Test public void holdsForOneSecondAndSearchesOnceBeforeRelease() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().visible().get();
         int[] holds = {0}, selections = {0}; PuzzleView view = view(activity, holds, selections);
         long down = SystemClock.uptimeMillis(); event(view, MotionEvent.ACTION_DOWN, 50, 50, down);
-        idle(1999); assertEquals(0, holds[0]); idle(1); assertEquals(1, holds[0]);
+        idle(999); assertEquals(0, holds[0]); idle(1); assertEquals(1, holds[0]);
         idle(2500); assertEquals(1, holds[0]); event(view, MotionEvent.ACTION_UP, 50, 50, down);
         assertEquals(0, selections[0]);
     }

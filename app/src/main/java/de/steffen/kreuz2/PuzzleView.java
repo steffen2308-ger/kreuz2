@@ -16,7 +16,7 @@ import android.view.ViewConfiguration;
 /** A screenshot with editable cell overlays, pinch zoom, pan and a visual crop editor. */
 public final class PuzzleView extends View {
     public interface Listener { void selected(); void longPress(int cell); default void touched(int cell) { } }
-    public static final long HOLD_TO_SEARCH_MS = 2000;
+    public static final long HOLD_TO_SEARCH_MS = 1000;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final ScaleGestureDetector scaleDetector;
     private final GestureDetector gestures;
@@ -47,7 +47,7 @@ public final class PuzzleView extends View {
 
     public PuzzleView(Context context) {
         super(context);
-        setContentDescription("Kreuzworträtsel. Feld antippen zum Schreiben. Fragetext zwei Sekunden gedrückt halten für eine Google-Suche. Mit zwei Fingern vergrößern.");
+        setContentDescription("Kreuzworträtsel. Feld antippen zum Schreiben. Fragetext eine Sekunde gedrückt halten für eine Google-Suche. Mit zwei Fingern vergrößern.");
         scaleDetector = new ScaleGestureDetector(context, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
             @Override public boolean onScale(ScaleGestureDetector detector) {
                 if (cropping) return false;

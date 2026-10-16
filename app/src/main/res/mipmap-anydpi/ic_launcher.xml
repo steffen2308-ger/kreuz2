@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#087D89" android:pathData="M28,4H80Q104,4 104,28V80Q104,104 80,104H28Q4,104 4,80V28Q4,4 28,4Z" />
+    <group android:pivotX="54" android:pivotY="54" android:scaleX="1.2" android:scaleY="1.2">
+    <!-- Soft offset behind a four-by-four crossword board. -->
+    <path android:fillColor="#22032F39" android:pathData="M36,30H72Q80,30 80,38V74Q80,82 72,82H36Q28,82 28,74V38Q28,30 36,30Z" />
+    <path android:fillColor="#FFFCF5" android:pathData="M34,27H70Q78,27 78,35V71Q78,79 70,79H34Q26,79 26,71V35Q26,27 34,27Z" />
+    <path android:strokeColor="#BCD9D9" android:strokeWidth="1.2" android:fillColor="#00000000"
+        android:pathData="M39,27V79M52,27V79M65,27V79M26,40H78M26,53H78M26,66H78" />
+    <path android:fillColor="#114854" android:pathData="M39.5,27H51.5V39.5H39.5ZM26,53.5H38.5V65.5H26ZM65.5,66.5H78V71Q78,79 70,79H65.5Z" />
+    <path android:fillColor="#E4F1EA" android:pathData="M52.5,40.5H64.5V52.5H52.5Z" />
+    <!-- White separation keeps the amber pencil legible over the grid. -->
+    <path android:fillColor="#FFFCF5" android:pathData="M60,65L77,48Q79,46 81,48L87,54Q89,56 87,58L70,75L57,79Z" />
+    <path android:fillColor="#F3B940" android:pathData="M62,65L77,50L85,58L70,73Z" />
+    <path android:fillColor="#FFE0A0" android:pathData="M62,65L65,68L80,53L77,50Z" />
+    <path android:fillColor="#E89029" android:pathData="M67,70L70,73L85,58L82,55Z" />
+    <path android:fillColor="#F8DDB0" android:pathData="M62,65L70,73L59,76Z" />
+    <path android:fillColor="#114854" android:pathData="M60.3,71.3L63.7,74.7L59,76Z" />
+    <path android:fillColor="#114854" android:pathData="M77,50L79,48Q80,47 81,48L87,54Q88,55 87,56L85,58Z" />
+    </group>
+</vector>
