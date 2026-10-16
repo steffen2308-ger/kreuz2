@@ -26,6 +26,8 @@ public class ClueSearchTest {
     private Bitmap image() { return Bitmap.createBitmap(81, 81, Bitmap.Config.ARGB_8888); }
     private PuzzleView view(Activity activity, int[] holds, int[] selections) {
         PuzzleView view = new PuzzleView(activity); activity.setContentView(view);
+        // Finish the Activity's first layout before sending timed touch events.
+        idle(100);
         view.layout(0, 0, 200, 200); view.setPuzzle(grid(), image(), true);
         view.setListener(new PuzzleView.Listener() {
             public void selected() { selections[0]++; }
@@ -51,7 +53,8 @@ public class ClueSearchTest {
         int[] holds = {0}, selections = {0}; PuzzleView view = view(activity, holds, selections);
         long down = SystemClock.uptimeMillis(); event(view, MotionEvent.ACTION_DOWN, 50, 50, down); idle(700);
         event(view, MotionEvent.ACTION_UP, 50, 50, down); idle(2500);
-        assertEquals(0, holds[0]); assertEquals(1, selections[0]);
+        assertEquals("Early release must cancel the search", 0, holds[0]);
+        assertEquals("Early release must still select the tapped cell", 1, selections[0]);
     }
     @Test public void draggingOrCancellingNeverStartsSearch() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().visible().get();
