@@ -100,7 +100,7 @@ public final class PuzzleStore {
                     || (!p.letters[i].isEmpty() && !p.letters[i].matches("[\\p{L}\\p{N}]"))) throw new IOException("Ungültige Felddaten.");
         }
         p.selected = json.optInt("selected", -1); p.direction = json.optInt("direction", 0);
-        if (!p.open(p.selected)) p.selected = -1;
+        if (!p.valid(p.selected)) p.selected = -1;
         if (p.direction < 0 || p.direction > 3) p.direction = 0;
         p.automatic = json.optBoolean("automatic", true); p.showGrid = json.optBoolean("showGrid", true);
         return p;

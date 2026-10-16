@@ -114,7 +114,7 @@ public class MainActivity extends Activity {
             @Override public void selected() {
                 if (busy || puzzle == null) return;
                 finishInput(); changed();
-                if (puzzle.open(puzzle.selected)) {
+                if (puzzle.valid(puzzle.selected)) {
                     keyboard.requestFocus(); ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(keyboard, InputMethodManager.SHOW_IMPLICIT);
                 }
             }
@@ -163,7 +163,7 @@ public class MainActivity extends Activity {
             if (dir >= 0 && puzzle != null) {
                 finishInput();
                 puzzle.direction = dir; int next = puzzle.neighbor(puzzle.selected, dir);
-                if (puzzle.open(next)) puzzle.selected = next;
+                if (puzzle.valid(next)) puzzle.selected = next;
                 changed(); return true;
             }
             return false;
@@ -192,7 +192,7 @@ public class MainActivity extends Activity {
         if (has) {
             directionIndicator.setDirection(puzzle.direction);
             if (!busy) status.setText(puzzle.cols + " Sp. × " + puzzle.rows + " Z. · " + puzzle.filled() + " Buchst."
-                    + (puzzle.open(puzzle.selected) ? " · Z" + (puzzle.selected / puzzle.cols + 1) + "/S" + (puzzle.selected % puzzle.cols + 1) : "")
+                    + (puzzle.valid(puzzle.selected) ? " · Z" + (puzzle.selected / puzzle.cols + 1) + "/S" + (puzzle.selected % puzzle.cols + 1) : "")
                     + (revision == savedRevision ? " · gespeichert" : " · speichert …"));
         }
         board.invalidate();
@@ -216,7 +216,7 @@ public class MainActivity extends Activity {
     private void typeText(String value) { typeText(value, true); }
     private void typeText(String value, boolean record) {
         if (puzzle == null || busy || editingCrop) return;
-        if (!puzzle.open(puzzle.selected)) { toast("Bitte zuerst ein freies Feld antippen."); return; }
+        if (!puzzle.valid(puzzle.selected)) { toast("Bitte zuerst ein Feld antippen."); return; }
         String input = value.toUpperCase(Locale.GERMAN);
         boolean recorded = false;
         for (int at = 0; at < input.length();) {
@@ -232,7 +232,7 @@ public class MainActivity extends Activity {
         if (puzzle == null || busy || editingCrop) return;
         try {
             if (compositionBase == null) {
-                if (!puzzle.open(puzzle.selected)) return;
+                if (!puzzle.valid(puzzle.selected)) return;
                 remember(); compositionBase = PuzzleStore.toJson(puzzle).toString();
             }
             puzzle = PuzzleStore.fromJson(new JSONObject(compositionBase));
@@ -246,7 +246,7 @@ public class MainActivity extends Activity {
         finishInput(); remember(); puzzle.direction = puzzle.direction % 2 == 0 ? Puzzle.DOWN : Puzzle.RIGHT; changed();
     }
     private void erase() { finishInput(); eraseGrid(); }
-    private void eraseGrid() { if (puzzle != null && !busy && !editingCrop && puzzle.open(puzzle.selected)) { remember(); puzzle.backspace(); changed(); } }
+    private void eraseGrid() { if (puzzle != null && !busy && !editingCrop && puzzle.valid(puzzle.selected)) { remember(); puzzle.backspace(); changed(); } }
     private void chooseDirection() {
         if (puzzle == null || busy) return;
         finishInput();
@@ -453,8 +453,10 @@ public class MainActivity extends Activity {
                         for (int nc = 0; nc < found.cols; nc++) if (x >= found.xs[nc] && x < found.xs[nc + 1]) {
                             for (int nr = 0; nr < found.rows; nr++) if (y >= found.ys[nr] && y < found.ys[nr + 1]) {
                                 int target = nr * found.cols + nc;
-                                if (found.open(target) && Math.abs(x - (found.xs[nc] + found.xs[nc + 1]) / 2) < (found.xs[nc + 1] - found.xs[nc]) * .35f
-                                        && Math.abs(y - (found.ys[nr] + found.ys[nr + 1]) / 2) < (found.ys[nr + 1] - found.ys[nr]) * .35f) found.letters[target] = previous.letters[i];
+                                if (Math.abs(x - (found.xs[nc] + found.xs[nc + 1]) / 2) < (found.xs[nc + 1] - found.xs[nc]) * .35f
+                                        && Math.abs(y - (found.ys[nr] + found.ys[nr + 1]) / 2) < (found.ys[nr + 1] - found.ys[nr]) * .35f) {
+                                    found.types[target] = Puzzle.OPEN; found.arrows[target] = 0; found.letters[target] = previous.letters[i];
+                                }
                             }
                         }
                     }
@@ -512,7 +514,7 @@ public class MainActivity extends Activity {
     }
     private void help() {
         new AlertDialog.Builder(this).setTitle("So füllst du dein Rätsel aus")
-                .setMessage("1. Bild öffnen: Wähle einen geraden Screenshot mit sichtbaren Rasterlinien.\n\n2. Prüfe die erkannte Anzahl und schalte Linien ein. Orange markiert Hinweisfelder, rot gesperrte Felder. Unter Mehr → Raster korrigieren kannst du die Ecken und die Anzahl anpassen.\n\n3. Tippe ein freies Feld an und schreibe mit der Tastatur. Nochmals antippen oder der große Pfeil wechselt waagerecht/senkrecht. Lange auf den Pfeil drücken bietet alle vier Richtungen.\n\n4. Auto folgt erkannten Pfeilen aus benachbarten Hinweisfeldern und setzt am Wortende nach unten bzw. rechts fort. Auto ausschalten hält deine Richtung fest. Kleine Pfeile und Hinweistext werden nur anhand ihrer Bildform erkannt; kein zuverlässiges Lesen aller Rätselarten. Ein Feld antippen und Mehr → Feldtyp/Pfeil bearbeiten öffnet die Korrektur.\n\n5. Mit zwei Fingern vergrößern, mit einem Finger verschieben. ↶ macht Eingaben oder Korrekturen rückgängig.\n\n6. Spielstände werden automatisch lokal gespeichert. Mehr → Spielstand speichern vergibt einen Namen. Mehr → Spielstand exportieren speichert eine Datei inklusive Bild; diese lässt sich später importieren. Lokale Spielstände gehen beim Deinstallieren verloren.\n\n7. Einen Fragetext eine Sekunde gedrückt halten: Die App liest den Ausschnitt lokal und öffnet Google mit dem Fragetext plus Kreuzworträtsel Lösung. Bei unleserlichem Text kannst du die Suchfrage eingeben. Für Google wird Internet benötigt; der Bildausschnitt wird nicht hochgeladen.\n\nDie App trägt keine gefundenen Lösungen automatisch ein.")
+                .setMessage("1. Bild öffnen: Wähle einen geraden Screenshot mit sichtbaren Rasterlinien.\n\n2. Prüfe die erkannte Anzahl und schalte Linien ein. Orange markiert Hinweisfelder, rot gesperrte Felder. Unter Mehr → Raster korrigieren kannst du die Ecken und die Anzahl anpassen.\n\n3. Tippe ein beliebiges Feld an und schreibe mit der Tastatur. Auch erkannte Frage- oder Sperrfelder lassen sich so überschreiben; die erste Eingabe macht sie zum Schreibfeld. Nochmals antippen oder der große Pfeil wechselt waagerecht/senkrecht. Lange auf den Pfeil drücken bietet alle vier Richtungen.\n\n4. Auto folgt erkannten Pfeilen aus benachbarten Hinweisfeldern und setzt am Wortende nach unten bzw. rechts fort. Auto ausschalten hält deine Richtung fest. Kleine Pfeile und Hinweistext werden nur anhand ihrer Bildform erkannt; kein zuverlässiges Lesen aller Rätselarten. Ein Feld antippen und Mehr → Feldtyp/Pfeil bearbeiten öffnet die Korrektur.\n\n5. Mit zwei Fingern vergrößern, mit einem Finger verschieben. ↶ macht Eingaben oder Korrekturen rückgängig.\n\n6. Spielstände werden automatisch lokal gespeichert. Mehr → Spielstand speichern vergibt einen Namen. Mehr → Spielstand exportieren speichert eine Datei inklusive Bild; diese lässt sich später importieren. Lokale Spielstände gehen beim Deinstallieren verloren.\n\n7. Einen Fragetext eine Sekunde gedrückt halten: Die App liest den Ausschnitt lokal und öffnet Google mit dem Fragetext plus Kreuzworträtsel Lösung. Bei unleserlichem Text kannst du die Suchfrage eingeben. Für Google wird Internet benötigt; der Bildausschnitt wird nicht hochgeladen.\n\nDie App trägt keine gefundenen Lösungen automatisch ein.")
                 .setPositiveButton("Verstanden", null).show();
     }
     private void hideKeyboard() {

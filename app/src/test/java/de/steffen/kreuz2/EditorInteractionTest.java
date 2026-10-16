@@ -66,6 +66,35 @@ public class EditorInteractionTest {
             connection.commitText("b", 1); assertEquals("B", model(a).letters[1]); assertEquals(2, model(a).filled());
         } finally { c.pause().stop().destroy(); }
     }
+    @Test public void tappingAMisrecognizedClueWritesIntoThatCellAndUndoRestoresItsType() throws Exception {
+        ActivityController<MainActivity> c = editor();
+        try {
+            MainActivity a = c.get(); Puzzle p = model(a);
+            p.types[0] = Puzzle.CLUE; p.arrows[0] = 1 << Puzzle.DOWN; p.selected = -1;
+            PuzzleView board = (PuzzleView) field(a, "board"); board.layout(0, 0, 201, 121);
+            tap(board, SystemClock.uptimeMillis(), 20, 20);
+            assertEquals("A clue arrow must not redirect an explicit tap", 0, model(a).selected);
+            assertEquals(Puzzle.CLUE, model(a).types[0]);
+            InputConnection connection = input(a).onCreateInputConnection(new EditorInfo());
+            connection.setComposingText("a", 1); assertEquals("A", model(a).letters[0]);
+            connection.setComposingText("ä", 1); connection.commitText("ä", 1);
+            assertEquals("Ä", model(a).letters[0]); assertTrue(model(a).open(0)); assertEquals(0, model(a).arrows[0]);
+            assertEquals(1, model(a).filled());
+            Method undo = MainActivity.class.getDeclaredMethod("undo"); undo.setAccessible(true); undo.invoke(a);
+            assertEquals("", model(a).letters[0]); assertEquals(Puzzle.CLUE, model(a).types[0]);
+            assertEquals(1 << Puzzle.DOWN, model(a).arrows[0]); assertEquals(0, model(a).selected);
+        } finally { c.pause().stop().destroy(); }
+    }
+    @Test public void aCellDetectedAsBlackCanBeTappedAndWrittenImmediately() throws Exception {
+        ActivityController<MainActivity> c = editor();
+        try {
+            MainActivity a = c.get(); Puzzle p = model(a); p.types[0] = Puzzle.BLOCK; p.selected = -1;
+            PuzzleView board = (PuzzleView) field(a, "board"); board.layout(0, 0, 201, 121);
+            tap(board, SystemClock.uptimeMillis(), 20, 20); assertEquals(0, model(a).selected);
+            input(a).onCreateInputConnection(new EditorInfo()).commitText("z", 1);
+            assertEquals("Z", model(a).letters[0]); assertTrue(model(a).open(0));
+        } finally { c.pause().stop().destroy(); }
+    }
     @Test public void lateCommitCannotWriteIntoANewlySelectedCell() throws Exception {
         ActivityController<MainActivity> c = editor();
         try {

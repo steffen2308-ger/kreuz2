@@ -120,7 +120,7 @@ public final class PuzzleView extends View {
         oy = h <= getHeight() ? (getHeight() - h) / 2 : Math.max(getHeight() - h, Math.min(0, oy));
     }
     public void revealSelection() {
-        if (puzzle == null || !puzzle.open(puzzle.selected)) return;
+        if (puzzle == null || !puzzle.valid(puzzle.selected)) return;
         int c = puzzle.selected % puzzle.cols, r = puzzle.selected / puzzle.cols;
         float x0 = puzzle.xs[c] * scale + ox, x1 = puzzle.xs[c + 1] * scale + ox;
         float y0 = puzzle.ys[r] * scale + oy, y1 = puzzle.ys[r + 1] * scale + oy;
@@ -228,7 +228,7 @@ public final class PuzzleView extends View {
                 }
             }
             if (puzzle.showGrid) drawLines(canvas, puzzle.xs, puzzle.ys);
-            if (puzzle.open(puzzle.selected)) {
+            if (puzzle.valid(puzzle.selected)) {
                 int c = puzzle.selected % puzzle.cols, r = puzzle.selected / puzzle.cols;
                 RectF rect = new RectF(puzzle.xs[c], puzzle.ys[r], puzzle.xs[c + 1], puzzle.ys[r + 1]);
                 paint.setColor(0x33007c91); paint.setStyle(Paint.Style.FILL); canvas.drawRect(rect, paint);

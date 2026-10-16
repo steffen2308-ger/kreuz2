@@ -42,7 +42,8 @@ public final class Puzzle {
         return out;
     }
 
-    public boolean open(int cell) { return cell >= 0 && cell < types.length && types[cell] == OPEN; }
+    public boolean valid(int cell) { return cell >= 0 && cell < types.length; }
+    public boolean open(int cell) { return valid(cell) && types[cell] == OPEN; }
     public int neighbor(int cell, int dir) {
         if (cell < 0 || cell >= types.length) return -1;
         int r = cell / cols, c = cell % cols;
@@ -70,16 +71,8 @@ public final class Puzzle {
         return best;
     }
     public void select(int cell, boolean toggle) {
-        if (cell < 0 || cell >= types.length) return;
-        if (types[cell] == CLUE) {
-            for (int dir = 0; dir < 4; dir++) {
-                int target = neighbor(cell, dir);
-                if ((arrows[cell] & (1 << dir)) != 0 && open(target)) {
-                    selected = target; direction = dir; return;
-                }
-            }
-        }
-        if (!open(cell)) return;
+        // Explicit selection always wins over image classification and clue arrows.
+        if (!valid(cell)) return;
         if (toggle && selected == cell) direction = direction % 2 == 0 ? DOWN : RIGHT;
         else if (automatic) direction = preferred(cell);
         selected = cell;
@@ -98,12 +91,15 @@ public final class Puzzle {
         }
     }
     public void put(String letter) {
-        if (!open(selected)) return;
+        if (!valid(selected)) return;
+        types[selected] = OPEN;
+        arrows[selected] = 0;
         letters[selected] = letter;
         advance();
     }
     public void backspace() {
-        if (!open(selected)) return;
+        if (!valid(selected)) return;
+        if (!open(selected) && letters[selected].isEmpty()) return;
         if (letters[selected].isEmpty()) {
             int prev = neighbor(selected, opposite(direction));
             if (open(prev)) selected = prev;

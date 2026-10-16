@@ -40,6 +40,18 @@ public class AndroidEditorTest {
         Puzzle p = puzzle(); PuzzleStore.Loaded copy = PuzzleStore.importDocument(PuzzleStore.export(p, image()));
         same(p, copy.puzzle); assertNotEquals(p.id, copy.puzzle.id); assertEquals(81, copy.bitmap.getHeight());
     }
+    @Test public void manualOverrideSurvivesSavingAndLoading() throws Exception {
+        Puzzle p = puzzle(); p.automatic = false; p.select(1, false); p.put("Ö");
+        PuzzleStore store = new PuzzleStore(RuntimeEnvironment.getApplication());
+        store.save(PuzzleStore.toJson(p).toString(), image(), p.id);
+        Puzzle loaded = store.load(p.id).puzzle;
+        assertEquals("Ö", loaded.letters[1]); assertTrue(loaded.open(1)); assertEquals(0, loaded.arrows[1]);
+    }
+    @Test public void selectedClueWithoutAnEntryRemainsSelectedAfterJsonRoundTrip() throws Exception {
+        Puzzle p = puzzle(); p.selected = 1;
+        Puzzle restored = PuzzleStore.fromJson(PuzzleStore.toJson(p));
+        assertEquals(1, restored.selected); assertEquals(Puzzle.CLUE, restored.types[1]);
+    }
     @Test(expected = java.io.IOException.class) public void corruptCellArraysAreRejected() throws Exception {
         JSONObject json = PuzzleStore.toJson(puzzle()); json.put("letters", new org.json.JSONArray()); PuzzleStore.fromJson(json);
     }

@@ -10,8 +10,8 @@ android {
         applicationId 'de.steffen.kreuz2'
         minSdk 23
         targetSdk 35
-        versionCode 7
-        versionName '0.4.1'
+        versionCode 8
+        versionName '0.4.2'
     }
 
     // Public development key: keeps test APK updates installable across CI runs.
