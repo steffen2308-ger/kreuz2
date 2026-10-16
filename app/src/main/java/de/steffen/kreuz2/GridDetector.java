@@ -134,9 +134,9 @@ public final class GridDetector {
         int side = Math.round(Math.min(r - l, b - t));
         // A filled triangular arrowhead with a stem, tested in several sizes/positions.
         for (int radius = 3; radius <= Math.min(10, side / 5); radius++) {
-            for (int edgeOffset = radius + 2; edgeOffset <= Math.min(side / 3, radius + 9); edgeOffset += 2) {
+            for (int edgeOffset = radius + 2; edgeOffset <= Math.min(side / 3, radius + 9); edgeOffset++) {
                 for (int along = Math.round((horizontal ? t : l) + side * .2f);
-                     along < (horizontal ? b : r) - side * .16f; along += 2) {
+                     along < (horizontal ? b : r) - side * .16f; along++) {
                     int cx = horizontal ? Math.round(dir == Puzzle.RIGHT ? r - edgeOffset : l + edgeOffset) : along;
                     int cy = horizontal ? along : Math.round(dir == Puzzle.DOWN ? b - edgeOffset : t + edgeOffset);
                     if (!dark(cx, cy) || !dark(cx + (horizontal ? (dir == Puzzle.RIGHT ? radius - 1 : 1 - radius) : 0),

@@ -16,8 +16,6 @@ import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
-import android.view.inputmethod.InputConnection;
-import android.view.inputmethod.InputConnectionWrapper;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.CheckBox;
@@ -53,7 +51,7 @@ public class MainActivity extends Activity {
     private ProgressBar progress;
     private Button openButton, savedButton, saveButton, moreButton, directionButton, undoButton;
     private CheckBox gridCheck, autoCheck;
-    private boolean busy, destroyed, changingControls, editingCrop, processingText;
+    private boolean busy, destroyed, changingControls, editingCrop;
     private int revision, savedRevision = -1;
     private String exportState;
     private Bitmap exportBitmap;
@@ -143,29 +141,12 @@ public class MainActivity extends Activity {
         columnsInput.addTextChangedListener(preview); rowsInput.addTextChangedListener(preview);
         position = text("Feld antippen · lange drücken: Feldtyp/Pfeil", 12); position.setPadding(dp(4), dp(4), 0, dp(2)); root.addView(position);
         LinearLayout typing = row();
-        keyboard = new EditText(this) {
-            @Override public InputConnection onCreateInputConnection(EditorInfo attributes) {
-                InputConnection original = super.onCreateInputConnection(attributes);
-                if (original == null) return null;
-                return new InputConnectionWrapper(original, false) {
-                    @Override public boolean deleteSurroundingText(int before, int after) {
-                        if (before > 0 && keyboard.length() == 0) { erase(); return true; }
-                        return super.deleteSurroundingText(before, after);
-                    }
-                    @Override public boolean deleteSurroundingTextInCodePoints(int before, int after) {
-                        if (before > 0 && keyboard.length() == 0) { erase(); return true; }
-                        if (android.os.Build.VERSION.SDK_INT >= 24) return super.deleteSurroundingTextInCodePoints(before, after);
-                        return super.deleteSurroundingText(before, after);
-                    }
-                    @Override public boolean sendKeyEvent(KeyEvent event) {
-                        if (event.getKeyCode() == KeyEvent.KEYCODE_DEL && keyboard.length() == 0) {
-                            if (event.getAction() == KeyEvent.ACTION_DOWN) erase(); return true;
-                        }
-                        return super.sendKeyEvent(event);
-                    }
-                };
-            }
-        };
+        LetterInput letterInput = new LetterInput(this);
+        keyboard = letterInput;
+        letterInput.setListener(new LetterInput.Listener() {
+            public void text(String value) { typeText(value); }
+            public void erase() { MainActivity.this.erase(); }
+        });
         keyboard.setSingleLine(true); keyboard.setTextSize(16); keyboard.setHint("Hier Buchstaben eingeben");
         keyboard.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         keyboard.setImeOptions(EditorInfo.IME_ACTION_DONE | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
@@ -180,26 +161,6 @@ public class MainActivity extends Activity {
                 changed(); return true;
             }
             return false;
-        });
-        keyboard.addTextChangedListener(new TextWatcher() {
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
-            public void onTextChanged(CharSequence s, int start, int before, int count) { }
-            public void afterTextChanged(Editable value) {
-                if (processingText || value.length() == 0) return;
-                String input = value.toString().toUpperCase(Locale.GERMAN);
-                processingText = true; value.clear(); processingText = false;
-                if (puzzle == null || busy || editingCrop) return;
-                if (!puzzle.open(puzzle.selected)) { toast("Bitte zuerst ein freies Feld antippen."); return; }
-                boolean recorded = false;
-                for (int at = 0; at < input.length();) {
-                    int cp = input.codePointAt(at); at += Character.charCount(cp);
-                    if (Character.isLetterOrDigit(cp)) {
-                        if (!recorded) { remember(); recorded = true; }
-                        puzzle.put(new String(Character.toChars(cp)));
-                    }
-                }
-                if (recorded) changed();
-            }
         });
         typing.addView(keyboard, new LinearLayout.LayoutParams(0, dp(48), 1)); button("⌫", typing, v -> erase()); root.addView(typing);
         setContentView(root); refresh();
@@ -245,6 +206,20 @@ public class MainActivity extends Activity {
         if (history.isEmpty()) return;
         try { puzzle = PuzzleStore.fromJson(new JSONObject(history.removeLast())); board.setPuzzle(puzzle, bitmap, false); changed(); }
         catch (Exception e) { error(e); }
+    }
+    private void typeText(String value) {
+        if (puzzle == null || busy || editingCrop) return;
+        if (!puzzle.open(puzzle.selected)) { toast("Bitte zuerst ein freies Feld antippen."); return; }
+        String input = value.toUpperCase(Locale.GERMAN);
+        boolean recorded = false;
+        for (int at = 0; at < input.length();) {
+            int cp = input.codePointAt(at); at += Character.charCount(cp);
+            if (Character.isLetterOrDigit(cp)) {
+                if (!recorded) { remember(); recorded = true; }
+                puzzle.put(new String(Character.toChars(cp)));
+            }
+        }
+        if (recorded) changed();
     }
     private void erase() { if (puzzle != null && !busy && !editingCrop && puzzle.open(puzzle.selected)) { remember(); puzzle.backspace(); changed(); } }
     private void chooseDirection() {
