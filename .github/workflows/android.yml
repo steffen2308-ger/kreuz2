@@ -36,7 +36,17 @@ jobs:
           gradle-version: '8.11.1'
 
       - name: Build and lint
-        run: gradle --no-daemon :app:assembleDebug :app:lintDebug
+        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
+
+      - name: Upload test and lint reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-and-lint-reports
+          path: |
+            app/build/reports/tests/
+            app/build/reports/lint-results-debug.html
+          if-no-files-found: ignore
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

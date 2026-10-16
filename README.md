@@ -1,19 +1,39 @@
-# Kreuz2 – Hello World
+# Kreuz2 – Kreuzworträtsel aus Screenshots
 
-Eine kleine native Android-App mit „Hello World!“.
+Native Android-App zum Öffnen und Ausfüllen eines Kreuzworträtsel-Screenshots. Die Verarbeitung findet offline auf dem Gerät statt, ohne Internet- oder pauschale Speicherberechtigung.
 
-## APK ohne Android Studio bauen
+## APK ohne Android Studio
 
-1. Öffne im GitHub-Repository **Actions → Android APK**.
-2. Der Build startet bei jedem Push auf `main`. Du kannst ihn auch mit **Run workflow** starten.
-3. Öffne den erfolgreichen Lauf und lade unter **Artifacts** `kreuz2-debug-apk` herunter.
-4. Entpacke die ZIP-Datei und installiere `app-debug.apk` auf deinem Android-Gerät. Erlaube bei Bedarf die Installation aus dieser Quelle.
+Unter **Actions → Android APK** den neuesten erfolgreichen Lauf öffnen. Bei **Artifacts** `kreuz2-debug-apk` herunterladen, ZIP entpacken und `app-debug.apk` installieren. Android 6.0 oder neuer wird benötigt. Das ist eine mit einem Debug-Schlüssel signierte Testversion. Nach Änderungen auf `main` baut GitHub automatisch; alternativ **Run workflow**.
 
-Die APK ist zum Testen mit einem Debug-Schlüssel signiert. Android 6.0 oder neuer wird benötigt.
+## Bedienung
 
-## Entwicklung
+1. **Bild öffnen** ruft die Android-Dateiauswahl auf. Der Screenshot wird intern kopiert; die Originaldatei bleibt unverändert.
+2. Die App sucht regelmäßige horizontale und vertikale dunkle Linien und zeigt **Spalten × Zeilen**. **Linien** schaltet das erkannte Raster über dem Bild ein/aus. Orange sind vermutete Hinweisfelder, rot gesperrte Felder.
+3. Über **Mehr → Raster korrigieren** die vier Ecken auf die äußeren Rastergrenzen ziehen und Spalten/Zeilen eingeben. Die Vorschau passt sich an. Bei unsicherer Erkennung startet die Korrektur mit einem ausdrücklich als Platzhalter bezeichneten 10 × 10 Raster.
+4. Ein freies Feld antippen und über die Gerätetastatur schreiben. Einfügen mehrerer Buchstaben ist ebenfalls möglich. Das Originalbild bleibt sichtbar. Erneutes Antippen des ausgewählten Feldes oder die Richtungstaste schaltet waagerecht/senkrecht um. Lange auf die Richtungstaste drücken erlaubt zusätzlich links/oben. Hardware-Pfeiltasten bewegen die Auswahl.
+5. **Auto** berücksichtigt Pfeile benachbarter Hinweisfelder und freie Nachbarfelder. Am rechten Wortende geht es nach unten, wenn dort ein freies Feld liegt; entsprechend von senkrecht nach rechts. Ist beides versperrt, wird das nächste leere Schreibfeld gesucht. Bei ausgeschaltetem Auto bleibt die Richtung fest und die Auswahl stoppt an Kanten/Hindernissen.
+6. Lange auf ein Feld drücken: **Schreibfeld**, **gesperrt**, **Hinweisfeld** oder **Pfeilrichtung** korrigieren. **↶ Zurück** nimmt bis zu 50 Bearbeitungsschritte der Sitzung zurück, auch Rasteränderungen. Dieser Undo-Verlauf wird nicht mit dem Spielstand gespeichert.
+7. Mit zwei Fingern zoomen und mit einem Finger verschieben; **Mehr → Ansicht einpassen** setzt die Ansicht zurück.
 
-Der Bildschirm liegt in `app/src/main/java/de/steffen/kreuz2/MainActivity.java`, Texte in `app/src/main/res/values/strings.xml`.
-Du kannst die Dateien direkt auf GitHub bearbeiten und committen; Actions baut anschließend eine neue APK.
+## Speichern und Fortsetzen
 
-Der Build verwendet Java 17, Gradle 8.11.1, Android Gradle Plugin 8.9.2 und Android SDK 35. Gradle wird im Workflow eingerichtet; ein Gradle-Wrapper ist noch nicht enthalten.
+- Eingaben werden nach kurzer Pause und beim Verlassen der App automatisch lokal gespeichert. **Speichern** vergibt einen Namen. **Spielstände** öffnet begonnene Rätsel; beim Neustart wird das zuletzt geöffnete geladen.
+- **Mehr → Spielstand exportieren** schreibt eine `.kreuz2.json` Datei in einen selbst gewählten Ordner. Darin stecken Bild, Raster, Buchstaben, Feldtypen, Pfeile und Eingaberichtung. Mit **Spielstand importieren** lässt sich eine solche Datei als neues lokales Rätsel öffnen.
+- Eine Deinstallation löscht die lokalen Spielstände. Exportierte Dateien bleiben erhalten. Der ursprüngliche Screenshot ist kein Spielstand.
+
+## Grenzen der Erkennung
+
+Die Erkennung ist eine Bildheuristik für gerade, rechteckige Screenshots mit sichtbaren dunklen Linien auf hellem Grund. Sie analysiert Linien, Tintenanteil, Textzeilen und kleine ausgefüllte Pfeilformen; sie liest die Hinweise nicht inhaltlich und löst keine Wörter. Standardmäßige kleine Pfeile nach rechts/unten/links/oben werden gesucht. Andere Pfeilstile, schräge Fotos, fehlende Außenlinien, sehr kleine oder unregelmäßige Raster und bereits beschriebene Rätsel können Korrekturen erfordern. Hinweisfelder und Pfeile bitte prüfen. Bilddateien sind auf 35 MB begrenzt und werden für die Anzeige auf höchstens ca. 2400 Pixel Kantenlänge reduziert; die Analyse arbeitet mit höchstens 1200 Pixeln. Raster bis 100 × 100 werden unterstützt.
+
+## Projekt und Prüfung
+
+- Java 17, Gradle 8.11.1, Android Gradle Plugin 8.9.2, SDK/Target 35, Minimum SDK 23. Gradle wird im Workflow eingerichtet; ein Wrapper ist nicht enthalten.
+- `GridDetector.java`: unabhängige Offline-Bildanalyse.
+- `Puzzle.java`: Raster, Felder, Buchstaben und Navigation.
+- `PuzzleView.java`: Bild, Linien, Buchstaben, Auswahl, Zoom und Rasterkorrektur.
+- `PuzzleStore.java`: atomare lokale Speicherung und portabler Export/Import.
+- `MainActivity.java`: Dateiauswahl, Bearbeitungsablauf, Tastatur und Spielstände.
+- `app/src/test/`: Tests mit synthetischen Screenshots für Raster, graue Linien, fehlende Innenlinie, Hinweis-/Sperrfelder, Pfeilformen sowie Navigation an Rändern und Hindernissen.
+
+GitHub Actions führt `:app:testDebugUnitTest :app:assembleDebug :app:lintDebug` aus. Testergebnisse und Lint-Bericht werden zusätzlich als `test-and-lint-reports` hochgeladen. Die Tests ersetzen keinen Gerätetest mit echten Screenshots und unterschiedlichen Android-Tastaturen.
