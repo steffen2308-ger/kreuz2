@@ -6,6 +6,8 @@ Native Android-App zum Öffnen und Ausfüllen eines Kreuzworträtsel-Screenshots
 
 Unter **Actions → Android APK** den neuesten erfolgreichen Lauf öffnen. Bei **Artifacts** `kreuz2-debug-apk` herunterladen, ZIP entpacken und `app-debug.apk` installieren. Android 6.0 oder neuer wird benötigt. Das ist eine mit einem Debug-Schlüssel signierte Testversion. Nach Änderungen auf `main` baut GitHub automatisch; alternativ **Run workflow**.
 
+Ab dieser Version verwendet die Test-App einen festen, bewusst öffentlichen Entwicklungsschlüssel (`app/debug.keystore`, Passwort `android`). Dadurch lassen sich spätere Testversionen über diese Version installieren, ohne die Spielstände zu verlieren. Der Schlüssel ist nicht für eine Veröffentlichung bestimmt. Eine zuvor installierte Hello-World-APK wurde noch mit einem anderen Schlüssel gebaut und muss einmal deinstalliert werden, falls Android das Update deshalb ablehnt.
+
 ## Bedienung
 
 1. **Bild öffnen** ruft die Android-Dateiauswahl auf. Der Screenshot wird intern kopiert; die Originaldatei bleibt unverändert.
@@ -34,6 +36,9 @@ Die Erkennung ist eine Bildheuristik für gerade, rechteckige Screenshots mit si
 - `PuzzleView.java`: Bild, Linien, Buchstaben, Auswahl, Zoom und Rasterkorrektur.
 - `PuzzleStore.java`: atomare lokale Speicherung und portabler Export/Import.
 - `MainActivity.java`: Dateiauswahl, Bearbeitungsablauf, Tastatur und Spielstände.
+- `LetterInput.java`: einmalige Übernahme bestätigter Tastatureingaben, inklusive zusammengesetzter Zeichen und Einfügen.
 - `app/src/test/`: Tests mit synthetischen Screenshots für Raster, graue Linien, fehlende Innenlinie, Hinweis-/Sperrfelder, Pfeilformen sowie Navigation an Rändern und Hindernissen.
 
 GitHub Actions führt `:app:testDebugUnitTest :app:assembleDebug :app:lintDebug` aus. Testergebnisse und Lint-Bericht werden zusätzlich als `test-and-lint-reports` hochgeladen. Die Tests ersetzen keinen Gerätetest mit echten Screenshots und unterschiedlichen Android-Tastaturen.
+
+Zusätzlich prüfen Android-Tests mit Robolectric den Datei-Rundlauf inklusive Bild, erneutes lokales Speichern, Tastatur-Komposition und den Start der App.
