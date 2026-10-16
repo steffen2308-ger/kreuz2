@@ -44,6 +44,8 @@ public class MainActivity extends Activity {
     private PuzzleStore store;
     private Puzzle puzzle;
     private Bitmap bitmap;
+    private ClueSearch.Reader clueReader = new ClueSearch.OnDeviceReader();
+    private int lastTouchedCell = -1;
     private PuzzleView board;
     private TextView status, position;
     private EditText keyboard, columnsInput, rowsInput;
@@ -124,7 +126,12 @@ public class MainActivity extends Activity {
                     keyboard.requestFocus(); ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(keyboard, InputMethodManager.SHOW_IMPLICIT);
                 }
             }
-            @Override public void longPress(int cell) { if (!busy) editCell(cell); }
+            @Override public void touched(int cell) { lastTouchedCell = cell; }
+            @Override public void longPress(int cell) {
+                if (busy || puzzle == null) return;
+                lastTouchedCell = cell;
+                if (puzzle.types[cell] == Puzzle.BLOCK) editCell(cell); else searchClue(cell);
+            }
         });
         cropPanel = new LinearLayout(this); cropPanel.setOrientation(LinearLayout.VERTICAL); cropPanel.setVisibility(View.GONE);
         cropPanel.addView(text("Raster: Ecken ziehen, Anzahl prüfen, übernehmen.", 12));
@@ -145,7 +152,7 @@ public class MainActivity extends Activity {
         directionIndicator.setOnClickListener(v -> toggleDirection());
         directionIndicator.setOnLongClickListener(v -> { chooseDirection(); return true; });
         directionRow.addView(directionIndicator, new LinearLayout.LayoutParams(dp(64), dp(56)));
-        position = text("Feld antippen · lange drücken: Feldtyp/Pfeil", 14); position.setPadding(dp(8), dp(4), 0, dp(2));
+        position = text("Fragetext 2 Sek. halten: Google-Suche", 14); position.setPadding(dp(8), dp(4), 0, dp(2));
         directionRow.addView(position, new LinearLayout.LayoutParams(0, -2, 1)); root.addView(directionRow);
         LinearLayout typing = row();
         LetterInput letterInput = new LetterInput(this);
@@ -200,7 +207,7 @@ public class MainActivity extends Activity {
             if (!busy) status.setText(puzzle.cols + " Spalten × " + puzzle.rows + " Zeilen · " + puzzle.filled() + " Buchstaben · "
                     + (revision == savedRevision ? "lokal gespeichert" : "wird gespeichert"));
             position.setText(puzzle.open(puzzle.selected) ? "Zeile " + (puzzle.selected / puzzle.cols + 1) + ", Spalte " + (puzzle.selected % puzzle.cols + 1)
-                    + " · " + DIRECTIONS[puzzle.direction] : "Feld antippen · lange drücken: Feldtyp/Pfeil");
+                    + " · " + DIRECTIONS[puzzle.direction] : "Fragetext 2 Sek. halten: Google-Suche");
         }
         board.invalidate();
     }
@@ -264,8 +271,9 @@ public class MainActivity extends Activity {
     private void more(View anchor) {
         finishInput();
         PopupMenu menu = new PopupMenu(this, anchor);
-        String[] labels = {"Raster korrigieren", "Automatisch neu erkennen", "Ansicht einpassen", "Spielstand exportieren", "Spielstand importieren", "Hilfe"};
+        String[] labels = {"Raster korrigieren", "Automatisch neu erkennen", "Ansicht einpassen", "Spielstand exportieren", "Spielstand importieren", "Hilfe", "Feldtyp/Pfeil bearbeiten"};
         for (int i = 0; i < labels.length; i++) menu.getMenu().add(0, i, i, labels[i]).setEnabled(i >= 4 || puzzle != null);
+        menu.getMenu().findItem(6).setEnabled(puzzle != null && (lastTouchedCell >= 0 || puzzle.selected >= 0));
         menu.setOnMenuItemClickListener(item -> {
             switch (item.getItemId()) {
                 case 0: startCrop(); break;
@@ -274,6 +282,7 @@ public class MainActivity extends Activity {
                 case 2: board.fitImage(); break;
                 case 3: export(); break;
                 case 4: openFile(true); break;
+                case 6: editCell(lastTouchedCell >= 0 ? lastTouchedCell : puzzle.selected); break;
                 default: help();
             }
             return true;
@@ -343,6 +352,7 @@ public class MainActivity extends Activity {
     }
     private void showPuzzle(Puzzle p, Bitmap b, boolean reset) {
         finishInput();
+        lastTouchedCell = -1;
         puzzle = p; bitmap = b; history.clear(); revision++; savedRevision = -1;
         getPreferences(MODE_PRIVATE).edit().putString("lastPuzzle", p.id).apply();
         editingCrop = false; cropPanel.setVisibility(View.GONE); board.setPuzzle(p, b, reset); refresh();
@@ -465,7 +475,7 @@ public class MainActivity extends Activity {
         });
     }
     private void editCell(int cell) {
-        if (puzzle == null || editingCrop) return;
+        if (puzzle == null || editingCrop || cell < 0 || cell >= puzzle.types.length) return;
         finishInput();
         String[] labels = { "Schreibfeld", "Schwarzes Feld / gesperrt", "Hinweisfeld ohne Pfeil", "Hinweis →", "Hinweis ↓", "Hinweis → und ↓", "Hinweis ←", "Hinweis ↑" };
         new AlertDialog.Builder(this).setTitle("Feld: Zeile " + (cell / puzzle.cols + 1) + ", Spalte " + (cell % puzzle.cols + 1))
@@ -477,9 +487,43 @@ public class MainActivity extends Activity {
                     changed();
                 }).setNegativeButton("Abbrechen", null).show();
     }
+    private void searchClue(int cell) {
+        if (puzzle == null || bitmap == null || busy || editingCrop) return;
+        finishInput(); hideKeyboard();
+        setBusy(true, "Fragetext wird auf dem Gerät gelesen …");
+        try {
+            clueReader.read(bitmap, puzzle, cell, new ClueSearch.Callback() {
+                public void success(String text) { ui(() -> {
+                    setBusy(false, "");
+                    if (ClueSearch.readable(text)) openGoogle(text); else manualClue(text, false);
+                }); }
+                public void failure(Exception error) { ui(() -> { setBusy(false, ""); manualClue("", true); }); }
+            });
+        } catch (Exception | OutOfMemoryError error) { setBusy(false, ""); manualClue("", true); }
+    }
+    private void manualClue(String recognized, boolean failed) {
+        LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); content.setPadding(dp(20), dp(8), dp(20), 0);
+        content.addView(text(failed ? "Der Fragetext konnte nicht gelesen werden. Gib ihn für die Google-Suche ein."
+                : "Kein sicher lesbarer Fragetext. Bitte den Suchtext ergänzen oder korrigieren.", 14));
+        EditText query = new EditText(this); query.setHint("Fragetext"); query.setText(ClueSearch.clean(recognized));
+        query.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES); content.addView(query);
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Kreuzworträtsel-Lösung suchen").setView(content)
+                .setPositiveButton("Google suchen", null).setNeutralButton("Feld bearbeiten", (d, w) -> editCell(lastTouchedCell))
+                .setNegativeButton("Abbrechen", null).create();
+        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String value = query.getText().toString();
+            if (!ClueSearch.readable(value)) { query.setError("Bitte einen Fragetext mit mindestens zwei Buchstaben eingeben (max. 600 Zeichen)."); return; }
+            dialog.dismiss(); openGoogle(value);
+        }));
+        dialog.show();
+    }
+    private void openGoogle(String clue) {
+        try { startActivity(new Intent(Intent.ACTION_VIEW, ClueSearch.googleUrl(clue))); }
+        catch (android.content.ActivityNotFoundException error) { toast("Zum Öffnen der Google-Suche wird ein Browser benötigt."); }
+    }
     private void help() {
         new AlertDialog.Builder(this).setTitle("So füllst du dein Rätsel aus")
-                .setMessage("1. Bild öffnen: Wähle einen geraden Screenshot mit sichtbaren Rasterlinien.\n\n2. Prüfe die erkannte Anzahl und schalte Linien ein. Orange markiert Hinweisfelder, rot gesperrte Felder. Unter Mehr → Raster korrigieren kannst du die Ecken und die Anzahl anpassen.\n\n3. Tippe ein freies Feld an und schreibe mit der Tastatur. Nochmals antippen oder die Richtungstaste wechselt waagerecht/senkrecht. Lange auf die Richtungstaste drücken bietet alle vier Richtungen.\n\n4. Auto folgt erkannten Pfeilen aus benachbarten Hinweisfeldern und setzt am Wortende nach unten bzw. rechts fort. Auto ausschalten hält deine Richtung fest. Kleine Pfeile und Hinweistext werden nur anhand ihrer Bildform erkannt; kein zuverlässiges Lesen aller Rätselarten. Lange auf ein Feld drücken korrigiert Feldtyp und Pfeil.\n\n5. Mit zwei Fingern vergrößern, mit einem Finger verschieben. ↶ macht Eingaben oder Korrekturen rückgängig.\n\n6. Spielstände werden automatisch lokal gespeichert. Speichern vergibt einen Namen. Mehr → Spielstand exportieren speichert eine Datei inklusive Bild; diese lässt sich später importieren. Lokale Spielstände gehen beim Deinstallieren verloren.\n\nBilder und Eingaben bleiben auf deinem Gerät. Die App löst keine Wörter automatisch.")
+                .setMessage("1. Bild öffnen: Wähle einen geraden Screenshot mit sichtbaren Rasterlinien.\n\n2. Prüfe die erkannte Anzahl und schalte Linien ein. Orange markiert Hinweisfelder, rot gesperrte Felder. Unter Mehr → Raster korrigieren kannst du die Ecken und die Anzahl anpassen.\n\n3. Tippe ein freies Feld an und schreibe mit der Tastatur. Nochmals antippen oder die Richtungstaste wechselt waagerecht/senkrecht. Lange auf die Richtungstaste drücken bietet alle vier Richtungen.\n\n4. Auto folgt erkannten Pfeilen aus benachbarten Hinweisfeldern und setzt am Wortende nach unten bzw. rechts fort. Auto ausschalten hält deine Richtung fest. Kleine Pfeile und Hinweistext werden nur anhand ihrer Bildform erkannt; kein zuverlässiges Lesen aller Rätselarten. Ein Feld antippen und Mehr → Feldtyp/Pfeil bearbeiten öffnet die Korrektur.\n\n5. Mit zwei Fingern vergrößern, mit einem Finger verschieben. ↶ macht Eingaben oder Korrekturen rückgängig.\n\n6. Spielstände werden automatisch lokal gespeichert. Speichern vergibt einen Namen. Mehr → Spielstand exportieren speichert eine Datei inklusive Bild; diese lässt sich später importieren. Lokale Spielstände gehen beim Deinstallieren verloren.\n\n7. Einen Fragetext zwei Sekunden gedrückt halten: Die App liest den Ausschnitt lokal und öffnet Google mit dem Fragetext plus Kreuzworträtsel Lösung. Bei unleserlichem Text kannst du die Suchfrage eingeben. Für Google wird Internet benötigt; der Bildausschnitt wird nicht hochgeladen.\n\nDie App trägt keine gefundenen Lösungen automatisch ein.")
                 .setPositiveButton("Verstanden", null).show();
     }
     private void hideKeyboard() {
@@ -493,6 +537,6 @@ public class MainActivity extends Activity {
                 .setMessage(error instanceof OutOfMemoryError ? "Das Bild benötigt zu viel Speicher. Bitte einen kleineren Screenshot wählen." : message == null ? "Bitte erneut versuchen." : message)
                 .setPositiveButton("OK", null).show();
     }
-    @Override protected void onPause() { super.onPause(); if (puzzle != null) persist(false); }
+    @Override protected void onPause() { super.onPause(); board.cancelPendingHold(); if (puzzle != null) persist(false); }
     @Override protected void onDestroy() { destroyed = true; handler.removeCallbacks(autoSave); worker.shutdown(); super.onDestroy(); }
 }

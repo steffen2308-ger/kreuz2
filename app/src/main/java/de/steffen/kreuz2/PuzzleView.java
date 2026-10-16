@@ -6,14 +6,17 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
+import android.os.SystemClock;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 import android.view.View;
+import android.view.ViewConfiguration;
 
 /** A screenshot with editable cell overlays, pinch zoom, pan and a visual crop editor. */
 public final class PuzzleView extends View {
-    public interface Listener { void selected(); void longPress(int cell); }
+    public interface Listener { void selected(); void longPress(int cell); default void touched(int cell) { } }
+    public static final long HOLD_TO_SEARCH_MS = 2000;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final ScaleGestureDetector scaleDetector;
     private final GestureDetector gestures;
@@ -25,12 +28,26 @@ public final class PuzzleView extends View {
     private int corner;
     private int lastTappedCell = -1;
     private float lastTapScale, lastTapOx, lastTapOy;
+    private float holdX, holdY;
+    private int holdCell = -1;
+    private boolean holdTriggered;
+    private final Runnable held = this::fireHold;
+    private void fireHold() {
+        if (holdCell >= 0 && isEnabled() && !cropping && !multitouch && listener != null) {
+            holdTriggered = true;
+            performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+            // Cancel GestureDetector's pending tap/double-tap before opening another screen.
+            MotionEvent cancel = MotionEvent.obtain(SystemClock.uptimeMillis(), SystemClock.uptimeMillis(), MotionEvent.ACTION_CANCEL, holdX, holdY, 0);
+            gestures.onTouchEvent(cancel); cancel.recycle();
+            listener.longPress(holdCell);
+        }
+    }
     private int previewCols = 10, previewRows = 10;
     public final RectF crop = new RectF();
 
     public PuzzleView(Context context) {
         super(context);
-        setContentDescription("Kreuzworträtsel. Feld antippen zum Schreiben, lange drücken zum Korrigieren. Mit zwei Fingern vergrößern.");
+        setContentDescription("Kreuzworträtsel. Feld antippen zum Schreiben. Fragetext zwei Sekunden gedrückt halten für eine Google-Suche. Mit zwei Fingern vergrößern.");
         scaleDetector = new ScaleGestureDetector(context, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
             @Override public boolean onScale(ScaleGestureDetector detector) {
                 if (cropping) return false;
@@ -52,35 +69,32 @@ public final class PuzzleView extends View {
                 if (e.getActionMasked() == MotionEvent.ACTION_UP) {
                     // Opening the keyboard can resize the image between the two taps.
                     int previous = cellAt(e.getX(), e.getY(), lastTapScale, lastTapOx, lastTapOy);
-                    if (previous == lastTappedCell && previous >= 0 && puzzle != null && !cropping && !multitouch) {
+                    if (previous == lastTappedCell && previous >= 0 && puzzle != null && !cropping && !multitouch && !holdTriggered) {
                         puzzle.select(previous, true); invalidate();
-                        if (listener != null) listener.selected();
+                        if (listener != null) { listener.touched(previous); listener.selected(); }
                         performClick(); return true;
                     }
                     return tap(e);
                 }
                 return true;
             }
-            @Override public void onLongPress(MotionEvent e) {
-                if (!cropping && !multitouch && listener != null) {
-                    int cell = cellAt(e.getX(), e.getY()); if (cell >= 0) listener.longPress(cell);
-                }
-            }
             @Override public boolean onScroll(MotionEvent e1, MotionEvent e2, float dx, float dy) {
                 if (!cropping && !scaleDetector.isInProgress()) { ox -= dx; oy -= dy; constrain(); invalidate(); }
                 return true;
             }
         });
+        gestures.setIsLongpressEnabled(false);
     }
     private boolean tap(MotionEvent e) {
-        if (cropping || multitouch || puzzle == null) return true;
+        if (cropping || multitouch || holdTriggered || puzzle == null) return true;
         int cell = cellAt(e.getX(), e.getY());
         lastTappedCell = cell; lastTapScale = scale; lastTapOx = ox; lastTapOy = oy;
-        if (cell >= 0) { puzzle.select(cell, true); invalidate(); if (listener != null) listener.selected(); }
+        if (cell >= 0) { puzzle.select(cell, true); invalidate(); if (listener != null) { listener.touched(cell); listener.selected(); } }
         performClick(); return true;
     }
     public void setListener(Listener listener) { this.listener = listener; }
     public void setPuzzle(Puzzle puzzle, Bitmap bitmap, boolean reset) {
+        cancelHold();
         this.puzzle = puzzle; this.bitmap = bitmap; cropping = false;
         if (reset) { lastTappedCell = -1; fitImage(); } invalidate();
     }
@@ -118,6 +132,7 @@ public final class PuzzleView extends View {
         constrain(); invalidate();
     }
     public void startCrop() {
+        cancelHold();
         if (bitmap == null) return;
         cropping = true; fitImage();
         if (puzzle != null) crop.set(puzzle.xs[0], puzzle.ys[0], puzzle.xs[puzzle.cols], puzzle.ys[puzzle.rows]);
@@ -140,11 +155,24 @@ public final class PuzzleView extends View {
         return c < 0 || r < 0 ? -1 : r * puzzle.cols + c;
     }
     @Override public boolean performClick() { super.performClick(); return true; }
+    private void cancelHold() { removeCallbacks(held); holdCell = -1; }
+    public void cancelPendingHold() { cancelHold(); }
+    @Override protected void onDetachedFromWindow() { cancelHold(); super.onDetachedFromWindow(); }
     @Override public boolean onTouchEvent(MotionEvent event) {
-        if (!isEnabled()) return true;
+        if (!isEnabled()) { cancelHold(); return true; }
         if (bitmap == null) return true;
-        if (event.getActionMasked() == MotionEvent.ACTION_DOWN) multitouch = false;
-        if (event.getPointerCount() > 1) multitouch = true;
+        if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+            cancelHold(); multitouch = false; holdTriggered = false;
+            holdX = event.getX(); holdY = event.getY();
+            if (!cropping) { holdCell = cellAt(holdX, holdY); if (holdCell >= 0) postDelayed(held, HOLD_TO_SEARCH_MS); }
+        }
+        if (event.getPointerCount() > 1) { multitouch = true; cancelHold(); }
+        if (event.getActionMasked() == MotionEvent.ACTION_MOVE) {
+            float dx = event.getX() - holdX, dy = event.getY() - holdY;
+            int slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
+            if (dx * dx + dy * dy > slop * slop) cancelHold();
+        }
+        if (event.getActionMasked() == MotionEvent.ACTION_UP || event.getActionMasked() == MotionEvent.ACTION_CANCEL) cancelHold();
         if (cropping) {
             float x = Math.max(0, Math.min(bitmap.getWidth() - 1, (event.getX() - ox) / scale));
             float y = Math.max(0, Math.min(bitmap.getHeight() - 1, (event.getY() - oy) / scale));

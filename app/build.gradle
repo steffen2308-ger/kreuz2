@@ -10,8 +10,8 @@ android {
         applicationId 'de.steffen.kreuz2'
         minSdk 23
         targetSdk 35
-        versionCode 3
-        versionName '0.2.1'
+        versionCode 4
+        versionName '0.3.0'
     }
 
     // Public development key: keeps test APK updates installable across CI runs.
@@ -35,6 +35,7 @@ android {
 }
 
 dependencies {
+    implementation 'com.google.mlkit:text-recognition:16.0.1'
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.robolectric:robolectric:4.14.1'
 }
