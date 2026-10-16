@@ -1,5 +1,6 @@
 package de.steffen.kreuz2;
 
+import android.annotation.SuppressLint;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.os.Build;
@@ -11,6 +12,8 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 
 /** Shows IME composition immediately; replacements update the same grid cells. */
+// The host intentionally uses a platform Activity/Material theme, not an AppCompat theme.
+@SuppressLint("AppCompatCustomView")
 public final class LetterInput extends EditText {
     public interface Listener {
         void text(String value);
