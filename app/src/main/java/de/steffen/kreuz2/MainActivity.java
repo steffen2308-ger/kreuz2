@@ -96,7 +96,6 @@ public class MainActivity extends Activity {
                     dp(8) + insets.getSystemWindowInsetRight(), dp(4) + insets.getSystemWindowInsetBottom());
             return insets.consumeSystemWindowInsets();
         });
-        TextView title = text("Kreuz2 · Screenshot ausfüllen", 20); title.setPadding(dp(4), dp(3), 0, dp(3)); root.addView(title);
         HorizontalScrollView actionsScroll = new HorizontalScrollView(this); actionsScroll.setHorizontalScrollBarEnabled(false);
         LinearLayout actions = row(); actionsScroll.addView(actions); root.addView(actionsScroll);
         openButton = button("Bild öffnen", actions, v -> openFile(false));
