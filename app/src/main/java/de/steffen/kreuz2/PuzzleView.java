@@ -23,6 +23,8 @@ public final class PuzzleView extends View {
     private float scale = 1, fit = 1, ox, oy;
     private boolean cropping, multitouch;
     private int corner;
+    private int lastTappedCell = -1;
+    private float lastTapScale, lastTapOx, lastTapOy;
     private int previewCols = 10, previewRows = 10;
     public final RectF crop = new RectF();
 
@@ -42,10 +44,22 @@ public final class PuzzleView extends View {
         gestures = new GestureDetector(context, new GestureDetector.SimpleOnGestureListener() {
             @Override public boolean onDown(MotionEvent e) { return true; }
             @Override public boolean onSingleTapUp(MotionEvent e) {
-                if (cropping || multitouch || puzzle == null) return true;
-                int cell = cellAt(e.getX(), e.getY());
-                if (cell >= 0) { puzzle.select(cell, true); invalidate(); if (listener != null) listener.selected(); }
-                performClick(); return true;
+                return tap(e);
+            }
+            @Override public boolean onDoubleTap(MotionEvent e) { return true; }
+            @Override public boolean onDoubleTapEvent(MotionEvent e) {
+                // GestureDetector consumes the second tap, so handle its release explicitly.
+                if (e.getActionMasked() == MotionEvent.ACTION_UP) {
+                    // Opening the keyboard can resize the image between the two taps.
+                    int previous = cellAt(e.getX(), e.getY(), lastTapScale, lastTapOx, lastTapOy);
+                    if (previous == lastTappedCell && previous >= 0 && puzzle != null && !cropping && !multitouch) {
+                        puzzle.select(previous, true); invalidate();
+                        if (listener != null) listener.selected();
+                        performClick(); return true;
+                    }
+                    return tap(e);
+                }
+                return true;
             }
             @Override public void onLongPress(MotionEvent e) {
                 if (!cropping && !multitouch && listener != null) {
@@ -58,10 +72,17 @@ public final class PuzzleView extends View {
             }
         });
     }
+    private boolean tap(MotionEvent e) {
+        if (cropping || multitouch || puzzle == null) return true;
+        int cell = cellAt(e.getX(), e.getY());
+        lastTappedCell = cell; lastTapScale = scale; lastTapOx = ox; lastTapOy = oy;
+        if (cell >= 0) { puzzle.select(cell, true); invalidate(); if (listener != null) listener.selected(); }
+        performClick(); return true;
+    }
     public void setListener(Listener listener) { this.listener = listener; }
     public void setPuzzle(Puzzle puzzle, Bitmap bitmap, boolean reset) {
         this.puzzle = puzzle; this.bitmap = bitmap; cropping = false;
-        if (reset) fitImage(); invalidate();
+        if (reset) { lastTappedCell = -1; fitImage(); } invalidate();
     }
     public void fitImage() {
         if (bitmap == null || getWidth() == 0 || getHeight() == 0) return;
@@ -107,8 +128,12 @@ public final class PuzzleView extends View {
     public void preview(int cols, int rows) { previewCols = cols; previewRows = rows; invalidate(); }
     public void endCrop() { cropping = false; invalidate(); }
     private int cellAt(float sx, float sy) {
+        return cellAt(sx, sy, scale, ox, oy);
+    }
+    private int cellAt(float sx, float sy, float imageScale, float imageOx, float imageOy) {
         if (puzzle == null) return -1;
-        float x = (sx - ox) / scale, y = (sy - oy) / scale;
+        if (imageScale <= 0) return -1;
+        float x = (sx - imageOx) / imageScale, y = (sy - imageOy) / imageScale;
         int c = -1, r = -1;
         for (int i = 0; i < puzzle.cols; i++) if (x >= puzzle.xs[i] && x < puzzle.xs[i + 1]) { c = i; break; }
         for (int i = 0; i < puzzle.rows; i++) if (y >= puzzle.ys[i] && y < puzzle.ys[i + 1]) { r = i; break; }

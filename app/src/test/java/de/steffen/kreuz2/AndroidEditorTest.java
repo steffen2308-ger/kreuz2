@@ -47,12 +47,19 @@ public class AndroidEditorTest {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         LetterInput input = new LetterInput(activity); activity.setContentView(input); input.requestFocus();
         StringBuilder received = new StringBuilder(); int[] erases = {0};
+        int[] compositionStart = {-1};
         input.setListener(new LetterInput.Listener() {
             public void text(String value) { received.append(value); }
             public void erase() { erases[0]++; }
+            public void composing(String value) {
+                if (compositionStart[0] < 0) compositionStart[0] = received.length();
+                received.setLength(compositionStart[0]); received.append(value);
+            }
+            public void finishComposition() { compositionStart[0] = -1; }
         });
         InputConnection connection = input.onCreateInputConnection(new EditorInfo()); assertNotNull(connection);
-        connection.setComposingText("h", 1); connection.setComposingText("ha", 1); assertEquals("", received.toString());
+        connection.setComposingText("h", 1); assertEquals("h", received.toString());
+        connection.setComposingText("ha", 1); assertEquals("ha", received.toString());
         connection.commitText("haus", 1); connection.finishComposingText(); assertEquals("haus", received.toString());
         connection.commitText("ü", 1); assertEquals("hausü", received.toString()); assertEquals(0, input.length());
         connection.deleteSurroundingText(1, 0); assertEquals(1, erases[0]);

@@ -47,6 +47,8 @@ public class MainActivity extends Activity {
     private PuzzleView board;
     private TextView status, position;
     private EditText keyboard, columnsInput, rowsInput;
+    private DirectionIndicator directionIndicator;
+    private String compositionBase;
     private LinearLayout cropPanel;
     private ProgressBar progress;
     private Button openButton, savedButton, saveButton, moreButton, directionButton, undoButton;
@@ -102,14 +104,13 @@ public class MainActivity extends Activity {
         HorizontalScrollView optionsScroll = new HorizontalScrollView(this); optionsScroll.setHorizontalScrollBarEnabled(false);
         LinearLayout options = row(); optionsScroll.addView(options); root.addView(optionsScroll);
         directionButton = button(DIRECTIONS[0], options, v -> {
-            if (puzzle == null) return; remember();
-            puzzle.direction = puzzle.direction % 2 == 0 ? Puzzle.DOWN : Puzzle.RIGHT; changed();
+            toggleDirection();
         });
         directionButton.setOnLongClickListener(v -> { chooseDirection(); return true; });
         autoCheck = new CheckBox(this); autoCheck.setText("Auto"); autoCheck.setTextSize(13); options.addView(autoCheck);
-        autoCheck.setOnCheckedChangeListener((v, checked) -> { if (!changingControls && puzzle != null) { puzzle.automatic = checked; changed(); } });
+        autoCheck.setOnCheckedChangeListener((v, checked) -> { if (!changingControls && puzzle != null) { finishInput(); puzzle.automatic = checked; changed(); } });
         gridCheck = new CheckBox(this); gridCheck.setText("Linien"); gridCheck.setTextSize(13); options.addView(gridCheck);
-        gridCheck.setOnCheckedChangeListener((v, checked) -> { if (!changingControls && puzzle != null) { puzzle.showGrid = checked; changed(); } });
+        gridCheck.setOnCheckedChangeListener((v, checked) -> { if (!changingControls && puzzle != null) { finishInput(); puzzle.showGrid = checked; changed(); } });
         undoButton = button("↶ Zurück", options, v -> undo());
         status = text("Ein Bild öffnen oder einen Spielstand importieren.", 12); status.setPadding(dp(4), dp(3), dp(4), dp(4)); root.addView(status);
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal); progress.setIndeterminate(true); progress.setVisibility(View.GONE);
@@ -118,7 +119,7 @@ public class MainActivity extends Activity {
         board.setListener(new PuzzleView.Listener() {
             @Override public void selected() {
                 if (busy || puzzle == null) return;
-                refresh(); scheduleSave();
+                finishInput(); changed();
                 if (puzzle.open(puzzle.selected)) {
                     keyboard.requestFocus(); ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(keyboard, InputMethodManager.SHOW_IMPLICIT);
                 }
@@ -139,23 +140,32 @@ public class MainActivity extends Activity {
             }
         };
         columnsInput.addTextChangedListener(preview); rowsInput.addTextChangedListener(preview);
-        position = text("Feld antippen · lange drücken: Feldtyp/Pfeil", 12); position.setPadding(dp(4), dp(4), 0, dp(2)); root.addView(position);
+        LinearLayout directionRow = row();
+        directionIndicator = new DirectionIndicator(this);
+        directionIndicator.setOnClickListener(v -> toggleDirection());
+        directionIndicator.setOnLongClickListener(v -> { chooseDirection(); return true; });
+        directionRow.addView(directionIndicator, new LinearLayout.LayoutParams(dp(64), dp(56)));
+        position = text("Feld antippen · lange drücken: Feldtyp/Pfeil", 14); position.setPadding(dp(8), dp(4), 0, dp(2));
+        directionRow.addView(position, new LinearLayout.LayoutParams(0, -2, 1)); root.addView(directionRow);
         LinearLayout typing = row();
         LetterInput letterInput = new LetterInput(this);
         keyboard = letterInput;
         letterInput.setListener(new LetterInput.Listener() {
             public void text(String value) { typeText(value); }
-            public void erase() { MainActivity.this.erase(); }
+            public void erase() { eraseGrid(); }
+            public void composing(String value) { previewComposition(value); }
+            public void finishComposition() { compositionBase = null; }
         });
         keyboard.setSingleLine(true); keyboard.setTextSize(16); keyboard.setHint("Hier Buchstaben eingeben");
-        keyboard.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        keyboard.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+                | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         keyboard.setImeOptions(EditorInfo.IME_ACTION_DONE | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
         keyboard.setOnKeyListener((v, keyCode, event) -> {
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
-            if (keyCode == KeyEvent.KEYCODE_DEL && keyboard.length() == 0) { erase(); return true; }
             int dir = keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ? Puzzle.RIGHT : keyCode == KeyEvent.KEYCODE_DPAD_DOWN ? Puzzle.DOWN
                     : keyCode == KeyEvent.KEYCODE_DPAD_LEFT ? Puzzle.LEFT : keyCode == KeyEvent.KEYCODE_DPAD_UP ? Puzzle.UP : -1;
             if (dir >= 0 && puzzle != null) {
+                finishInput();
                 puzzle.direction = dir; int next = puzzle.neighbor(puzzle.selected, dir);
                 if (puzzle.open(next)) puzzle.selected = next;
                 changed(); return true;
@@ -181,10 +191,12 @@ public class MainActivity extends Activity {
         saveButton.setEnabled(has && !busy && !editingCrop); directionButton.setEnabled(has && !busy && !editingCrop);
         autoCheck.setEnabled(has && !busy && !editingCrop); gridCheck.setEnabled(has && !busy && !editingCrop);
         keyboard.setEnabled(has && !busy && !editingCrop); undoButton.setEnabled(!history.isEmpty() && !busy && !editingCrop);
+        directionIndicator.setEnabled(has && !busy && !editingCrop);
         board.setEnabled(!busy);
         changingControls = true; autoCheck.setChecked(has && puzzle.automatic); gridCheck.setChecked(has && puzzle.showGrid); changingControls = false;
         if (has) {
             directionButton.setText(DIRECTIONS[puzzle.direction]);
+            directionIndicator.setDirection(puzzle.direction);
             if (!busy) status.setText(puzzle.cols + " Spalten × " + puzzle.rows + " Zeilen · " + puzzle.filled() + " Buchstaben · "
                     + (revision == savedRevision ? "lokal gespeichert" : "wird gespeichert"));
             position.setText(puzzle.open(puzzle.selected) ? "Zeile " + (puzzle.selected / puzzle.cols + 1) + ", Spalte " + (puzzle.selected % puzzle.cols + 1)
@@ -204,10 +216,12 @@ public class MainActivity extends Activity {
     }
     private void undo() {
         if (history.isEmpty()) return;
+        finishInput();
         try { puzzle = PuzzleStore.fromJson(new JSONObject(history.removeLast())); board.setPuzzle(puzzle, bitmap, false); changed(); }
         catch (Exception e) { error(e); }
     }
-    private void typeText(String value) {
+    private void typeText(String value) { typeText(value, true); }
+    private void typeText(String value, boolean record) {
         if (puzzle == null || busy || editingCrop) return;
         if (!puzzle.open(puzzle.selected)) { toast("Bitte zuerst ein freies Feld antippen."); return; }
         String input = value.toUpperCase(Locale.GERMAN);
@@ -215,20 +229,40 @@ public class MainActivity extends Activity {
         for (int at = 0; at < input.length();) {
             int cp = input.codePointAt(at); at += Character.charCount(cp);
             if (Character.isLetterOrDigit(cp)) {
-                if (!recorded) { remember(); recorded = true; }
+                if (!recorded) { if (record) remember(); recorded = true; }
                 puzzle.put(new String(Character.toChars(cp)));
             }
         }
-        if (recorded) changed();
+        if (recorded || !record) changed();
     }
-    private void erase() { if (puzzle != null && !busy && !editingCrop && puzzle.open(puzzle.selected)) { remember(); puzzle.backspace(); changed(); } }
+    private void previewComposition(String value) {
+        if (puzzle == null || busy || editingCrop) return;
+        try {
+            if (compositionBase == null) {
+                if (!puzzle.open(puzzle.selected)) return;
+                remember(); compositionBase = PuzzleStore.toJson(puzzle).toString();
+            }
+            puzzle = PuzzleStore.fromJson(new JSONObject(compositionBase));
+            board.setPuzzle(puzzle, bitmap, false);
+            typeText(value, false);
+        } catch (Exception e) { compositionBase = null; error(e); }
+    }
+    private void finishInput() { if (keyboard instanceof LetterInput) ((LetterInput) keyboard).resetInput(); compositionBase = null; }
+    private void toggleDirection() {
+        if (puzzle == null || busy || editingCrop) return;
+        finishInput(); remember(); puzzle.direction = puzzle.direction % 2 == 0 ? Puzzle.DOWN : Puzzle.RIGHT; changed();
+    }
+    private void erase() { finishInput(); eraseGrid(); }
+    private void eraseGrid() { if (puzzle != null && !busy && !editingCrop && puzzle.open(puzzle.selected)) { remember(); puzzle.backspace(); changed(); } }
     private void chooseDirection() {
         if (puzzle == null || busy) return;
+        finishInput();
         new AlertDialog.Builder(this).setTitle("Schreibrichtung").setSingleChoiceItems(DIRECTIONS, puzzle.direction, (d, index) -> {
             remember(); puzzle.direction = index; changed(); d.dismiss();
         }).setNegativeButton("Abbrechen", null).show();
     }
     private void more(View anchor) {
+        finishInput();
         PopupMenu menu = new PopupMenu(this, anchor);
         String[] labels = {"Raster korrigieren", "Automatisch neu erkennen", "Ansicht einpassen", "Spielstand exportieren", "Spielstand importieren", "Hilfe"};
         for (int i = 0; i < labels.length; i++) menu.getMenu().add(0, i, i, labels[i]).setEnabled(i >= 4 || puzzle != null);
@@ -308,6 +342,7 @@ public class MainActivity extends Activity {
         return result;
     }
     private void showPuzzle(Puzzle p, Bitmap b, boolean reset) {
+        finishInput();
         puzzle = p; bitmap = b; history.clear(); revision++; savedRevision = -1;
         getPreferences(MODE_PRIVATE).edit().putString("lastPuzzle", p.id).apply();
         editingCrop = false; cropPanel.setVisibility(View.GONE); board.setPuzzle(p, b, reset); refresh();
@@ -336,6 +371,7 @@ public class MainActivity extends Activity {
     }
     private void nameAndSave() {
         if (puzzle == null) return;
+        finishInput();
         EditText name = new EditText(this); name.setSingleLine(); name.setText(puzzle.name); name.setSelectAllOnFocus(true);
         new AlertDialog.Builder(this).setTitle("Spielstand speichern").setView(name).setPositiveButton("Speichern", (d, w) -> {
             String title = name.getText().toString().trim(); puzzle.name = title.isEmpty() ? "Mein Kreuzworträtsel" : title.substring(0, Math.min(100, title.length()));
@@ -430,6 +466,7 @@ public class MainActivity extends Activity {
     }
     private void editCell(int cell) {
         if (puzzle == null || editingCrop) return;
+        finishInput();
         String[] labels = { "Schreibfeld", "Schwarzes Feld / gesperrt", "Hinweisfeld ohne Pfeil", "Hinweis →", "Hinweis ↓", "Hinweis → und ↓", "Hinweis ←", "Hinweis ↑" };
         new AlertDialog.Builder(this).setTitle("Feld: Zeile " + (cell / puzzle.cols + 1) + ", Spalte " + (cell % puzzle.cols + 1))
                 .setItems(labels, (d, which) -> {
