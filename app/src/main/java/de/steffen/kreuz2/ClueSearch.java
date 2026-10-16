@@ -59,8 +59,9 @@ public final class ClueSearch {
                 decoder = BitmapRegionDecoder.newInstance(original.getAbsolutePath(), false);
                 if (decoder != null) {
                     float sx = decoder.getWidth() / (float) image.getWidth(), sy = decoder.getHeight() / (float) image.getHeight();
-                    Rect source = new Rect((int) Math.floor(area.left * sx), (int) Math.floor(area.top * sy),
-                            Math.min(decoder.getWidth(), (int) Math.ceil(area.right * sx)), Math.min(decoder.getHeight(), (int) Math.ceil(area.bottom * sy)));
+                    int c = cell % puzzle.cols, r = cell / puzzle.cols;
+                    Rect source = new Rect(Math.max(0, (int) Math.ceil(puzzle.xs[c] * sx) + 2), Math.max(0, (int) Math.ceil(puzzle.ys[r] * sy) + 2),
+                            Math.min(decoder.getWidth(), (int) Math.floor(puzzle.xs[c + 1] * sx) - 1), Math.min(decoder.getHeight(), (int) Math.floor(puzzle.ys[r + 1] * sy) - 1));
                     BitmapFactory.Options options = new BitmapFactory.Options(); options.inSampleSize = 1; options.inScaled = false;
                     while (Math.max(source.width(), source.height()) / options.inSampleSize > 1600) options.inSampleSize *= 2;
                     Bitmap crop = decoder.decodeRegion(source, options);

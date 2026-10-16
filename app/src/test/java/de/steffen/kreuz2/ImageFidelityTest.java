@@ -19,12 +19,42 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
+import org.robolectric.annotation.Implements;
+import org.robolectric.annotation.Implementation;
+import org.robolectric.shadow.api.Shadow;
+import org.robolectric.shadows.ShadowBitmapRegionDecoder;
 import static org.junit.Assert.*;
 
 @RunWith(org.robolectric.RobolectricTestRunner.class)
-@Config(sdk = 28)
+@Config(sdk = 28, shadows = ImageFidelityTest.PixelRegionDecoder.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class ImageFidelityTest {
+    /**
+     * Robolectric 4.14's region decoder always returns an empty bitmap, even in native mode.
+     * Supply its missing region semantics using the real native PNG decoder/canvas, so these
+     * tests check retained source pixels and our renderer rather than Robolectric's empty stub.
+     * Platform region-decoder behavior itself remains a device-test responsibility.
+     */
+    @Implements(BitmapRegionDecoder.class)
+    public static class PixelRegionDecoder extends ShadowBitmapRegionDecoder {
+        private String path;
+        private Bitmap full;
+        @Implementation protected static BitmapRegionDecoder newInstance(String path, boolean shareable) throws java.io.IOException {
+            BitmapRegionDecoder result = ShadowBitmapRegionDecoder.newInstance(path, shareable);
+            PixelRegionDecoder shadow = Shadow.extract(result); shadow.path = path; return result;
+        }
+        @Override @Implementation protected Bitmap decodeRegion(Rect rect, BitmapFactory.Options options) {
+            if (full == null) { BitmapFactory.Options settings = new BitmapFactory.Options(); settings.inScaled = false; full = BitmapFactory.decodeFile(path, settings); }
+            Bitmap crop = Bitmap.createBitmap(full, rect.left, rect.top, rect.width(), rect.height());
+            int sample = Math.max(1, options.inSampleSize);
+            if (sample > 1) {
+                Bitmap small = Bitmap.createScaledBitmap(crop, Math.max(1, crop.getWidth() / sample), Math.max(1, crop.getHeight() / sample), false);
+                if (crop != full) crop.recycle(); return small;
+            }
+            return crop;
+        }
+        @Implementation protected void recycle() { if (full != null) { full.recycle(); full = null; } }
+    }
     private byte[] original() {
         Bitmap image = Bitmap.createBitmap(3600, 3000, Bitmap.Config.ARGB_8888); image.eraseColor(Color.WHITE);
         // One-pixel strokes disappear when this 3600-pixel image is reduced to its preview.
