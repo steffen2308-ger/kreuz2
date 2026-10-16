@@ -15,11 +15,12 @@ import android.view.ViewConfiguration;
 
 /** A screenshot with editable cell overlays, pinch zoom, pan and a visual crop editor. */
 public final class PuzzleView extends View {
-    public interface Listener { void selected(); void longPress(int cell); default void touched(int cell) { } }
+    public interface Listener { void selected(); void longPress(int cell); default void touched(int cell) { } default void imageError(String message) { } }
     public static final long HOLD_TO_SEARCH_MS = 1000;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final ScaleGestureDetector scaleDetector;
     private final GestureDetector gestures;
+    private final OriginalImageTiles originalTiles;
     private Bitmap bitmap;
     private Puzzle puzzle;
     private Listener listener;
@@ -47,12 +48,13 @@ public final class PuzzleView extends View {
 
     public PuzzleView(Context context) {
         super(context);
+        originalTiles = new OriginalImageTiles(this::invalidate, message -> { if (listener != null) listener.imageError(message); });
         setContentDescription("Kreuzworträtsel. Feld antippen zum Schreiben. Fragetext eine Sekunde gedrückt halten für eine Google-Suche. Mit zwei Fingern vergrößern.");
         scaleDetector = new ScaleGestureDetector(context, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
             @Override public boolean onScale(ScaleGestureDetector detector) {
                 if (cropping) return false;
                 float old = scale;
-                scale = Math.max(fit, Math.min(fit * 12, scale * detector.getScaleFactor()));
+                scale = Math.max(fit, Math.min(Math.max(fit * 32, 4f), scale * detector.getScaleFactor()));
                 ox = detector.getFocusX() - (detector.getFocusX() - ox) * scale / old;
                 oy = detector.getFocusY() - (detector.getFocusY() - oy) * scale / old;
                 constrain(); invalidate(); return true;
@@ -93,6 +95,11 @@ public final class PuzzleView extends View {
         performClick(); return true;
     }
     public void setListener(Listener listener) { this.listener = listener; }
+    public void setOriginalImage(java.io.File file) {
+        if (bitmap != null) originalTiles.setSource(file, bitmap.getWidth(), bitmap.getHeight());
+        invalidate();
+    }
+    public void releaseImages() { originalTiles.close(); }
     public void setPuzzle(Puzzle puzzle, Bitmap bitmap, boolean reset) {
         cancelHold();
         this.puzzle = puzzle; this.bitmap = bitmap; cropping = false;
@@ -201,7 +208,9 @@ public final class PuzzleView extends View {
         }
         canvas.save(); canvas.translate(ox, oy); canvas.scale(scale, scale);
         paint.setStyle(Paint.Style.FILL); paint.setColor(Color.WHITE); paint.setAlpha(255);
+        paint.setFilterBitmap(scale < 1f);
         canvas.drawBitmap(bitmap, 0, 0, paint);
+        originalTiles.draw(canvas, getWidth(), getHeight(), scale, ox, oy);
         if (cropping) {
             paint.setColor(0x880e2633);
             canvas.drawRect(0, 0, bitmap.getWidth(), crop.top, paint);

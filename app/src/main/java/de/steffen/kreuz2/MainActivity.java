@@ -37,7 +37,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
-    private static final int OPEN_IMAGE = 10, OPEN_DOCUMENT = 11, EXPORT_DOCUMENT = 12;
+    private static final int OPEN_IMAGE = 10, OPEN_DOCUMENT = 11, EXPORT_DOCUMENT = 12, REPLACE_ORIGINAL = 13;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ArrayDeque<String> history = new ArrayDeque<>();
@@ -59,6 +59,7 @@ public class MainActivity extends Activity {
     private int revision, savedRevision = -1;
     private String exportState;
     private Bitmap exportBitmap;
+    private java.io.File exportOriginal;
     private final Runnable autoSave = () -> persist(false);
     private static final String[] DIRECTIONS = { "→ Waagerecht", "↓ Senkrecht", "← Nach links", "↑ Nach oben" };
     private static final class Session {
@@ -119,6 +120,7 @@ public class MainActivity extends Activity {
                 }
             }
             @Override public void touched(int cell) { lastTouchedCell = cell; }
+            @Override public void imageError(String message) { if (!destroyed) toast(message); }
             @Override public void longPress(int cell) {
                 if (busy || puzzle == null) return;
                 lastTouchedCell = cell;
@@ -257,10 +259,11 @@ public class MainActivity extends Activity {
     private void more(View anchor) {
         finishInput();
         PopupMenu menu = new PopupMenu(this, anchor);
-        String[] labels = {"Raster korrigieren", "Automatisch neu erkennen", "Ansicht einpassen", "Spielstand exportieren", "Spielstand importieren", "Hilfe", "Feldtyp/Pfeil bearbeiten", "Spielstand speichern", "Spielstände öffnen"};
+        String[] labels = {"Raster korrigieren", "Automatisch neu erkennen", "Ansicht einpassen", "Spielstand exportieren", "Spielstand importieren", "Hilfe", "Feldtyp/Pfeil bearbeiten", "Spielstand speichern", "Spielstände öffnen", "Originalbild erneut zuordnen"};
         for (int i = 0; i < labels.length; i++) menu.getMenu().add(0, i, i, labels[i]).setEnabled(i >= 4 || puzzle != null);
         menu.getMenu().findItem(6).setEnabled(puzzle != null && (lastTouchedCell >= 0 || puzzle.selected >= 0));
         menu.getMenu().findItem(7).setEnabled(puzzle != null);
+        menu.getMenu().findItem(9).setEnabled(puzzle != null);
         menu.setOnMenuItemClickListener(item -> {
             switch (item.getItemId()) {
                 case 0: startCrop(); break;
@@ -272,6 +275,7 @@ public class MainActivity extends Activity {
                 case 6: editCell(lastTouchedCell >= 0 ? lastTouchedCell : puzzle.selected); break;
                 case 7: nameAndSave(); break;
                 case 8: savedGames(); break;
+                case 9: chooseOriginal(); break;
                 default: help();
             }
             return true;
@@ -284,26 +288,34 @@ public class MainActivity extends Activity {
         try { startActivityForResult(intent, document ? OPEN_DOCUMENT : OPEN_IMAGE); }
         catch (Exception e) { error(e); }
     }
+    private void chooseOriginal() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("image/*");
+        try { startActivityForResult(intent, REPLACE_ORIGINAL); } catch (Exception e) { error(e); }
+    }
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
         if (result != RESULT_OK || data == null || data.getData() == null) return;
         Uri uri = data.getData();
         if (request == EXPORT_DOCUMENT) { finishExport(uri); return; }
+        if (request == REPLACE_ORIGINAL) { replaceOriginal(uri); return; }
         if (request != OPEN_IMAGE && request != OPEN_DOCUMENT) return;
         setBusy(true, request == OPEN_IMAGE ? "Bild wird geladen und Raster erkannt …" : "Spielstand wird geöffnet …");
         worker.execute(() -> {
             try {
                 byte[] bytes;
-                try (InputStream in = getContentResolver().openInputStream(uri)) { bytes = PuzzleStore.readLimited(in, 35 * 1024 * 1024); }
+                try (InputStream in = getContentResolver().openInputStream(uri)) { bytes = PuzzleStore.readLimited(in, request == OPEN_DOCUMENT ? PuzzleStore.MAX_DOCUMENT_BYTES : PuzzleStore.MAX_IMAGE_BYTES); }
                 Bitmap image; Puzzle found; boolean detected = true;
-                if (request == OPEN_DOCUMENT) { PuzzleStore.Loaded loaded = PuzzleStore.importDocument(bytes); image = loaded.bitmap; found = loaded.puzzle; }
+                byte[] original;
+                if (request == OPEN_DOCUMENT) { PuzzleStore.Loaded loaded = PuzzleStore.importDocument(bytes); image = loaded.bitmap; found = loaded.puzzle; original = loaded.original; }
                 else {
                     image = PuzzleStore.decode(bytes); found = analyze(image, null);
+                    original = bytes;
                     if (found == null) {
                         detected = false;
                         found = new Puzzle(Puzzle.evenly(0, image.getWidth() - 1, 10), Puzzle.evenly(0, image.getHeight() - 1, 10));
                     }
                 }
+                if (original != null) store.saveOriginal(found.id, original);
                 final Puzzle p = found; final Bitmap b = image; final boolean recognized = detected;
                 ui(() -> {
                     showPuzzle(p, b, true); setBusy(false, ""); persist(false);
@@ -344,7 +356,8 @@ public class MainActivity extends Activity {
         lastTouchedCell = -1;
         puzzle = p; bitmap = b; history.clear(); revision++; savedRevision = -1;
         getPreferences(MODE_PRIVATE).edit().putString("lastPuzzle", p.id).apply();
-        editingCrop = false; cropPanel.setVisibility(View.GONE); board.setPuzzle(p, b, reset); refresh();
+        editingCrop = false; cropPanel.setVisibility(View.GONE); board.setPuzzle(p, b, reset);
+        board.setOriginalImage(store.originalFile(p.id)); refresh();
     }
     private void load(String id) {
         setBusy(true, "Spielstand wird geladen …");
@@ -394,7 +407,7 @@ public class MainActivity extends Activity {
     private void export() {
         if (puzzle == null) return;
         try {
-            exportState = PuzzleStore.toJson(puzzle).toString(); exportBitmap = bitmap;
+            exportState = PuzzleStore.toJson(puzzle).toString(); exportBitmap = bitmap; exportOriginal = store.originalFile(puzzle.id);
             Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT); intent.addCategory(Intent.CATEGORY_OPENABLE); intent.setType("application/json");
             intent.putExtra(Intent.EXTRA_TITLE, puzzle.name.replaceAll("[^\\p{L}\\p{N} _-]", "_") + ".kreuz2.json");
             startActivityForResult(intent, EXPORT_DOCUMENT);
@@ -408,15 +421,17 @@ public class MainActivity extends Activity {
         final Bitmap image = exportBitmap != null ? exportBitmap : bitmap;
         if (state == null || image == null) { toast("Bitte den Spielstand laden und den Export erneut starten."); return; }
         setBusy(true, "Spielstand mit Bild wird exportiert …");
+        final java.io.File source = exportOriginal;
         worker.execute(() -> {
             try {
-                byte[] bytes = PuzzleStore.export(PuzzleStore.fromJson(new JSONObject(state)), image);
+                Puzzle exported = PuzzleStore.fromJson(new JSONObject(state));
+                byte[] bytes = PuzzleStore.export(exported, image, source != null ? source : store.originalFile(exported.id));
                 try (OutputStream out = getContentResolver().openOutputStream(uri, "wt")) {
                     if (out == null) throw new java.io.IOException("Zieldatei nicht verfügbar."); out.write(bytes);
                 }
                 ui(() -> { setBusy(false, ""); toast("Spielstand mit Bild exportiert."); });
             } catch (Exception | OutOfMemoryError e) { ui(() -> { setBusy(false, ""); error(e); }); }
-            finally { exportState = null; exportBitmap = null; }
+            finally { exportState = null; exportBitmap = null; exportOriginal = null; }
         });
     }
     private void startCrop() {
@@ -424,6 +439,27 @@ public class MainActivity extends Activity {
         hideKeyboard(); editingCrop = true; board.startCrop();
         columnsInput.setText(String.valueOf(puzzle.cols)); rowsInput.setText(String.valueOf(puzzle.rows));
         cropPanel.setVisibility(View.VISIBLE); refresh();
+    }
+    private void replaceOriginal(Uri uri) {
+        if (puzzle == null || bitmap == null) return;
+        String id = puzzle.id; int previewWidth = bitmap.getWidth(), previewHeight = bitmap.getHeight();
+        setBusy(true, "Originalbild wird ohne Verkleinerung übernommen …");
+        worker.execute(() -> {
+            try {
+                byte[] bytes;
+                try (InputStream in = getContentResolver().openInputStream(uri)) { bytes = PuzzleStore.readLimited(in, PuzzleStore.MAX_IMAGE_BYTES); }
+                android.graphics.BitmapFactory.Options bounds = PuzzleStore.imageBounds(bytes);
+                if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw new java.io.IOException("Keine unterstützte Bilddatei.");
+                double ratio = (bounds.outWidth / (double) bounds.outHeight) / (previewWidth / (double) previewHeight);
+                if (Math.abs(ratio - 1) > .02) throw new java.io.IOException("Das Seitenverhältnis passt nicht zum bisherigen Hintergrund. Bitte dieselbe Originaldatei mit demselben Bildausschnitt auswählen.");
+                store.saveOriginal(id, bytes);
+                ui(() -> {
+                    setBusy(false, "");
+                    if (puzzle != null && puzzle.id.equals(id)) board.setOriginalImage(store.originalFile(id));
+                    toast("Originalbild übernommen. Beim Zoomen werden die Originaldetails geladen. Deine Eingaben bleiben erhalten.");
+                });
+            } catch (Exception | OutOfMemoryError e) { ui(() -> { setBusy(false, ""); error(e); }); }
+        });
     }
     private void endCrop() { hideKeyboard(); editingCrop = false; board.endCrop(); cropPanel.setVisibility(View.GONE); refresh(); }
     private void applyCrop() {
@@ -483,7 +519,7 @@ public class MainActivity extends Activity {
         finishInput(); hideKeyboard();
         setBusy(true, "Fragetext wird auf dem Gerät gelesen …");
         try {
-            clueReader.read(bitmap, puzzle, cell, new ClueSearch.Callback() {
+            clueReader.read(bitmap, puzzle, cell, store.originalFile(puzzle.id), new ClueSearch.Callback() {
                 public void success(String text) { ui(() -> {
                     setBusy(false, "");
                     if (ClueSearch.readable(text)) openGoogle(text); else manualClue(text, false);
@@ -514,7 +550,7 @@ public class MainActivity extends Activity {
     }
     private void help() {
         new AlertDialog.Builder(this).setTitle("So füllst du dein Rätsel aus")
-                .setMessage("1. Bild öffnen: Wähle einen geraden Screenshot mit sichtbaren Rasterlinien.\n\n2. Prüfe die erkannte Anzahl und schalte Linien ein. Orange markiert Hinweisfelder, rot gesperrte Felder. Unter Mehr → Raster korrigieren kannst du die Ecken und die Anzahl anpassen.\n\n3. Tippe ein beliebiges Feld an und schreibe mit der Tastatur. Auch erkannte Frage- oder Sperrfelder lassen sich so überschreiben; die erste Eingabe macht sie zum Schreibfeld. Nochmals antippen oder der große Pfeil wechselt waagerecht/senkrecht. Lange auf den Pfeil drücken bietet alle vier Richtungen.\n\n4. Auto folgt erkannten Pfeilen aus benachbarten Hinweisfeldern und setzt am Wortende nach unten bzw. rechts fort. Auto ausschalten hält deine Richtung fest. Kleine Pfeile und Hinweistext werden nur anhand ihrer Bildform erkannt; kein zuverlässiges Lesen aller Rätselarten. Ein Feld antippen und Mehr → Feldtyp/Pfeil bearbeiten öffnet die Korrektur.\n\n5. Mit zwei Fingern vergrößern, mit einem Finger verschieben. ↶ macht Eingaben oder Korrekturen rückgängig.\n\n6. Spielstände werden automatisch lokal gespeichert. Mehr → Spielstand speichern vergibt einen Namen. Mehr → Spielstand exportieren speichert eine Datei inklusive Bild; diese lässt sich später importieren. Lokale Spielstände gehen beim Deinstallieren verloren.\n\n7. Einen Fragetext eine Sekunde gedrückt halten: Die App liest den Ausschnitt lokal und öffnet Google mit dem Fragetext plus Kreuzworträtsel Lösung. Bei unleserlichem Text kannst du die Suchfrage eingeben. Für Google wird Internet benötigt; der Bildausschnitt wird nicht hochgeladen.\n\nDie App trägt keine gefundenen Lösungen automatisch ein.")
+                .setMessage("1. Bild öffnen: Wähle einen geraden Screenshot mit sichtbaren Rasterlinien.\n\n2. Prüfe die erkannte Anzahl und schalte Linien ein. Orange markiert Hinweisfelder, rot gesperrte Felder. Unter Mehr → Raster korrigieren kannst du die Ecken und die Anzahl anpassen.\n\n3. Tippe ein beliebiges Feld an und schreibe mit der Tastatur. Auch erkannte Frage- oder Sperrfelder lassen sich so überschreiben; die erste Eingabe macht sie zum Schreibfeld. Nochmals antippen oder der große Pfeil wechselt waagerecht/senkrecht. Lange auf den Pfeil drücken bietet alle vier Richtungen.\n\n4. Auto folgt erkannten Pfeilen aus benachbarten Hinweisfeldern und setzt am Wortende nach unten bzw. rechts fort. Auto ausschalten hält deine Richtung fest. Kleine Pfeile und Hinweistext werden nur anhand ihrer Bildform erkannt; kein zuverlässiges Lesen aller Rätselarten. Ein Feld antippen und Mehr → Feldtyp/Pfeil bearbeiten öffnet die Korrektur.\n\n5. Mit zwei Fingern vergrößern, mit einem Finger verschieben. Originaldetails werden beim Zoomen nachgeladen. Bei alten, unscharfen Spielständen über Mehr → Originalbild erneut zuordnen dieselbe Originaldatei wählen; die Eingaben bleiben erhalten. ↶ macht Eingaben oder Korrekturen rückgängig.\n\n6. Spielstände werden automatisch lokal gespeichert. Mehr → Spielstand speichern vergibt einen Namen. Mehr → Spielstand exportieren speichert eine Datei inklusive Bild; diese lässt sich später importieren. Lokale Spielstände gehen beim Deinstallieren verloren.\n\n7. Einen Fragetext eine Sekunde gedrückt halten: Die App liest den Ausschnitt lokal und öffnet Google mit dem Fragetext plus Kreuzworträtsel Lösung. Bei unleserlichem Text kannst du die Suchfrage eingeben. Für Google wird Internet benötigt; der Bildausschnitt wird nicht hochgeladen.\n\nDie App trägt keine gefundenen Lösungen automatisch ein.")
                 .setPositiveButton("Verstanden", null).show();
     }
     private void hideKeyboard() {
@@ -529,5 +565,5 @@ public class MainActivity extends Activity {
                 .setPositiveButton("OK", null).show();
     }
     @Override protected void onPause() { super.onPause(); board.cancelPendingHold(); if (puzzle != null) persist(false); }
-    @Override protected void onDestroy() { destroyed = true; handler.removeCallbacks(autoSave); worker.shutdown(); super.onDestroy(); }
+    @Override protected void onDestroy() { destroyed = true; handler.removeCallbacks(autoSave); board.releaseImages(); worker.shutdown(); super.onDestroy(); }
 }

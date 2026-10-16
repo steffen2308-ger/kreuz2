@@ -21,6 +21,8 @@ import java.util.List;
 
 /** Saves the copied image and an atomic JSON document; no dependency on the original URI. */
 public final class PuzzleStore {
+    public static final int MAX_IMAGE_BYTES = 35 * 1024 * 1024;
+    public static final int MAX_DOCUMENT_BYTES = 80 * 1024 * 1024;
     private final File root;
     public PuzzleStore(Context context) { root = new File(context.getFilesDir(), "puzzles"); }
     public static final class Entry {
@@ -29,13 +31,29 @@ public final class PuzzleStore {
     }
     public static final class Loaded {
         public final Puzzle puzzle; public final Bitmap bitmap;
-        Loaded(Puzzle puzzle, Bitmap bitmap) { this.puzzle = puzzle; this.bitmap = bitmap; }
+        public final byte[] original;
+        Loaded(Puzzle puzzle, Bitmap bitmap) { this(puzzle, bitmap, null); }
+        Loaded(Puzzle puzzle, Bitmap bitmap, byte[] original) { this.puzzle = puzzle; this.bitmap = bitmap; this.original = original; }
     }
     private File folder(String id) throws IOException {
         if (!id.matches("[a-fA-F0-9-]{36}")) throw new IOException("Ungültige Spielstand-ID.");
         File dir = new File(root, id);
         if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("Speicher nicht verfügbar.");
         return dir;
+    }
+    public File originalFile(String id) {
+        if (id == null || !id.matches("[a-fA-F0-9-]{36}")) return null;
+        File source = new File(new File(root, id), "original.image");
+        return source.isFile() ? source : null;
+    }
+    public void saveOriginal(String id, byte[] bytes) throws IOException {
+        if (bytes == null || bytes.length == 0 || bytes.length > MAX_IMAGE_BYTES) throw new IOException("Originalbild ist leer oder größer als 35 MB.");
+        BitmapFactory.Options bounds = imageBounds(bytes);
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw new IOException("Keine unterstützte Originalbilddatei.");
+        AtomicFile target = new AtomicFile(new File(folder(id), "original.image"));
+        FileOutputStream out = target.startWrite();
+        try { out.write(bytes); target.finishWrite(out); }
+        catch (Exception error) { target.failWrite(out); throw new IOException(error); }
     }
     public void save(String state, Bitmap bitmap, String id) throws IOException {
         File dir = folder(id);
@@ -59,7 +77,7 @@ public final class PuzzleStore {
             p = fromJson(new JSONObject(new String(readLimited(in, 2 * 1024 * 1024), StandardCharsets.UTF_8)));
         }
         Bitmap bitmap;
-        try (InputStream in = new FileInputStream(new File(dir, "image.png"))) { bitmap = decode(readLimited(in, 25 * 1024 * 1024)); }
+        try (InputStream in = new FileInputStream(new File(dir, "image.png"))) { bitmap = decode(readLimited(in, MAX_IMAGE_BYTES)); }
         validateBounds(p, bitmap);
         return new Loaded(p, bitmap);
     }
@@ -115,20 +133,32 @@ public final class PuzzleStore {
         return out.toByteArray();
     }
     public static Bitmap decode(byte[] bytes) throws IOException {
-        BitmapFactory.Options bounds = new BitmapFactory.Options(); bounds.inJustDecodeBounds = true;
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.length, bounds);
+        BitmapFactory.Options bounds = imageBounds(bytes);
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw new IOException("Keine unterstützte Bilddatei.");
         BitmapFactory.Options options = new BitmapFactory.Options(); options.inSampleSize = 1;
         while (Math.max(bounds.outWidth, bounds.outHeight) / options.inSampleSize > 2400) options.inSampleSize *= 2;
         options.inPreferredConfig = Bitmap.Config.ARGB_8888;
+        options.inScaled = false;
         Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
         if (bitmap == null) throw new IOException("Bild konnte nicht geladen werden.");
         return bitmap;
     }
+    public static BitmapFactory.Options imageBounds(byte[] bytes) {
+        BitmapFactory.Options bounds = new BitmapFactory.Options(); bounds.inJustDecodeBounds = true;
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.length, bounds); return bounds;
+    }
     public static byte[] export(Puzzle p, Bitmap bitmap) throws Exception {
+        return export(p, bitmap, null);
+    }
+    public static byte[] export(Puzzle p, Bitmap bitmap, File original) throws Exception {
         JSONObject json = toJson(p); ByteArrayOutputStream image = new ByteArrayOutputStream();
         if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, image)) throw new IOException("Bildexport fehlgeschlagen.");
         json.put("image", Base64.encodeToString(image.toByteArray(), Base64.NO_WRAP));
+        if (original != null) {
+            try (InputStream in = new FileInputStream(original)) {
+                json.put("originalImage", Base64.encodeToString(readLimited(in, MAX_IMAGE_BYTES), Base64.NO_WRAP));
+            }
+        }
         return json.toString().getBytes(StandardCharsets.UTF_8);
     }
     public static Loaded importDocument(byte[] bytes) throws Exception {
@@ -137,6 +167,16 @@ public final class PuzzleStore {
         validateBounds(p, bitmap);
         // Imported copies must not overwrite another local puzzle's image/state.
         p.id = java.util.UUID.randomUUID().toString();
-        return new Loaded(p, bitmap);
+        byte[] original = null;
+        if (json.has("originalImage")) {
+            String encoded = json.getString("originalImage");
+            if (encoded.length() > (MAX_IMAGE_BYTES / 3L + 1) * 4) throw new IOException("Originalbild im Spielstand ist zu groß.");
+            original = Base64.decode(encoded, Base64.DEFAULT);
+            BitmapFactory.Options bounds = imageBounds(original);
+            if (original.length > MAX_IMAGE_BYTES || bounds.outWidth <= 0 || bounds.outHeight <= 0) throw new IOException("Ungültiges Originalbild im Spielstand.");
+            double ratio = (bounds.outWidth / (double) bounds.outHeight) / (bitmap.getWidth() / (double) bitmap.getHeight());
+            if (Math.abs(ratio - 1) > .02) throw new IOException("Originalbild und Vorschaubild passen nicht zusammen.");
+        }
+        return new Loaded(p, bitmap, original);
     }
 }

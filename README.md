@@ -26,6 +26,12 @@ Keine Überschrift. Eine 34-dp-Werkzeugleiste enthält Bild öffnen, Auto, Linie
 6. Ein Feld antippen und **Mehr → Feldtyp/Pfeil bearbeiten** öffnen: **Schreibfeld**, **gesperrt**, **Hinweisfeld** oder **Pfeilrichtung** korrigieren. **↶ Zurück** nimmt bis zu 50 Bearbeitungsschritte der Sitzung zurück, auch Rasteränderungen. Dieser Undo-Verlauf wird nicht mit dem Spielstand gespeichert.
 7. Mit zwei Fingern zoomen und mit einem Finger verschieben; **Mehr → Ansicht einpassen** setzt die Ansicht zurück.
 
+## Bildschärfe bei großen Rätseln
+
+Neue Bildimporte behalten die komplette Originaldatei. Die Übersicht und Rasteranalyse verwenden kleine Arbeitskopien; beim Hineinzoomen werden nur die sichtbaren Ausschnitte aus dem Original nachgeladen. Dadurch bleiben feine Schrift und Linien erhalten, ohne das gesamte große Bild als Bitmap im Arbeitsspeicher halten zu müssen. Auch die Google-Texterkennung nutzt, soweit vorhanden, den originalen Feldausschnitt. Das Original wird beim lokalen Speichern und beim Export/Import mitgenommen.
+
+Ältere Versionen haben nur das verkleinerte Bild gespeichert. Für einen solchen Spielstand **Mehr → Originalbild erneut zuordnen** wählen und dieselbe Originaldatei mit demselben Bildausschnitt auswählen. Raster und eingegebene Buchstaben bleiben erhalten. Verlorene Originaldetails lassen sich ohne diese Datei nicht aus der alten Vorschau rekonstruieren.
+
 ## Fragetext in Google suchen
 
 Einen Fragetext ungefähr **eine Sekunde gedrückt halten**. Sobald das Handy kurz vibriert, wird der Text dieses Feldes lokal erkannt und Google im Browser mit `Fragetext Kreuzworträtsel Lösung` geöffnet. Du musst dazu nicht erst loslassen. Kurzes Tippen bleibt für die Eingabe; Verschieben, Zoomen und Loslassen vor Ablauf einer Sekunde brechen das Halten ab.
@@ -44,7 +50,7 @@ Die Rastererkennung passt den Schwellwert an den lokalen Bildhintergrund an und 
 
 Zwölf zusätzliche synthetische Screenshots prüfen blasse und farbige Linien, Unterbrechungen, mehrere fehlende Linien, fehlende Außenkanten, Skalierung, kleine Raster, zusätzliche Hinweistrenner, schwarze Flächen, andere kleine Raster im Bild und ungleichmäßigen Hintergrund. Weitere Prüfungen verhindern erfundene Raster auf Text, einfarbigen Flächen, Streifen und Bildrauschen. Dies ist keine Garantie für jeden realen Screenshot.
 
-Die Erkennung ist eine Bildheuristik für gerade, rechteckige Screenshots mit sichtbaren dunklen Linien auf hellem Grund. Sie analysiert Linien, Tintenanteil, Textzeilen und kleine ausgefüllte Pfeilformen; sie versteht die Hinweise nicht inhaltlich und löst keine Wörter. Für die auf Wunsch gestartete Google-Suche liest eine zusätzliche lokale Texterkennung (ML Kit, lateinische Schrift) den ausgewählten Feldausschnitt. Standardmäßige kleine Pfeile nach rechts/unten/links/oben werden gesucht. Andere Pfeilstile, schräge Fotos, stark beschnittene Außenbereiche, sehr kleine oder unregelmäßige Raster und bereits beschriebene Rätsel können Korrekturen erfordern. Hinweisfelder und Pfeile bitte prüfen. Bilddateien sind auf 35 MB begrenzt und werden für die Anzeige auf höchstens ca. 2400 Pixel Kantenlänge reduziert; die Analyse arbeitet mit höchstens 1200 Pixeln. Raster bis 100 × 100 werden unterstützt.
+Die Erkennung ist eine Bildheuristik für gerade, rechteckige Screenshots mit sichtbaren dunklen Linien auf hellem Grund. Sie analysiert Linien, Tintenanteil, Textzeilen und kleine ausgefüllte Pfeilformen; sie versteht die Hinweise nicht inhaltlich und löst keine Wörter. Für die auf Wunsch gestartete Google-Suche liest eine zusätzliche lokale Texterkennung (ML Kit, lateinische Schrift) den ausgewählten Feldausschnitt. Standardmäßige kleine Pfeile nach rechts/unten/links/oben werden gesucht. Andere Pfeilstile, schräge Fotos, stark beschnittene Außenbereiche, sehr kleine oder unregelmäßige Raster und bereits beschriebene Rätsel können Korrekturen erfordern. Hinweisfelder und Pfeile bitte prüfen. Original-Bilddateien sind auf 35 MB begrenzt und werden unverändert aufbewahrt. Nur die Übersicht wird auf höchstens ca. 2400 Pixel Kantenlänge reduziert; die Rasteranalyse arbeitet mit höchstens 1200 Pixeln. Die Zoom-Anzeige lädt Originaldetails in speicherbegrenzten Kacheln nach. Spielstanddateien inklusive Original dürfen beim Import bis zu 80 MB groß sein. Raster bis 100 × 100 werden unterstützt.
 
 ## Projekt und Prüfung
 
@@ -53,6 +59,7 @@ Die Erkennung ist eine Bildheuristik für gerade, rechteckige Screenshots mit si
 - `GridLocator.java`: gemeinsame Suche beider Rasterachsen und Rekonstruktion belegter Lücken.
 - `Puzzle.java`: Raster, Felder, Buchstaben und Navigation.
 - `PuzzleView.java`: Bild, Linien, Buchstaben, Auswahl, Zoom und Rasterkorrektur.
+- `OriginalImageTiles.java`: dateibasierte Originalausschnitte, Zoom-Kacheln und Speicherbegrenzung.
 - `PuzzleStore.java`: atomare lokale Speicherung und portabler Export/Import.
 - `MainActivity.java`: Dateiauswahl, Bearbeitungsablauf, Tastatur und Spielstände.
 - `LetterInput.java`: einmalige Übernahme bestätigter Tastatureingaben, inklusive zusammengesetzter Zeichen und Einfügen.

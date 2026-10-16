@@ -1,6 +1,8 @@
 package de.steffen.kreuz2;
 
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.BitmapRegionDecoder;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -15,10 +17,16 @@ import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 /** Only recognized text is used in the browser URL; the cropped image stays on-device. */
 public final class ClueSearch {
     public interface Callback { void success(String text); void failure(Exception error); }
-    public interface Reader { void read(Bitmap image, Puzzle puzzle, int cell, Callback callback); }
+    public interface Reader {
+        void read(Bitmap image, Puzzle puzzle, int cell, Callback callback);
+        default void read(Bitmap image, Puzzle puzzle, int cell, java.io.File original, Callback callback) { read(image, puzzle, cell, callback); }
+    }
     public static final class OnDeviceReader implements Reader {
         @Override public void read(Bitmap image, Puzzle puzzle, int cell, Callback callback) {
-            Bitmap prepared = prepare(image, puzzle, cell);
+            read(image, puzzle, cell, null, callback);
+        }
+        @Override public void read(Bitmap image, Puzzle puzzle, int cell, java.io.File original, Callback callback) {
+            Bitmap prepared = prepare(image, puzzle, cell, original);
             TextRecognizer recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
             try {
                 recognizer.process(InputImage.fromBitmap(prepared, 0))
@@ -41,7 +49,31 @@ public final class ClueSearch {
         return new Rect(left, top, right, bottom);
     }
     public static Bitmap prepare(Bitmap image, Puzzle puzzle, int cell) {
+        return prepare(image, puzzle, cell, null);
+    }
+    public static Bitmap prepare(Bitmap image, Puzzle puzzle, int cell, java.io.File original) {
         Rect area = bounds(image, puzzle, cell);
+        if (original != null) {
+            BitmapRegionDecoder decoder = null;
+            try {
+                decoder = BitmapRegionDecoder.newInstance(original.getAbsolutePath(), false);
+                if (decoder != null) {
+                    float sx = decoder.getWidth() / (float) image.getWidth(), sy = decoder.getHeight() / (float) image.getHeight();
+                    Rect source = new Rect((int) Math.floor(area.left * sx), (int) Math.floor(area.top * sy),
+                            Math.min(decoder.getWidth(), (int) Math.ceil(area.right * sx)), Math.min(decoder.getHeight(), (int) Math.ceil(area.bottom * sy)));
+                    BitmapFactory.Options options = new BitmapFactory.Options(); options.inSampleSize = 1; options.inScaled = false;
+                    while (Math.max(source.width(), source.height()) / options.inSampleSize > 1600) options.inSampleSize *= 2;
+                    Bitmap crop = decoder.decodeRegion(source, options);
+                    if (crop != null) {
+                        Bitmap result = padded(crop, new Rect(0, 0, crop.getWidth(), crop.getHeight())); crop.recycle(); return result;
+                    }
+                }
+            } catch (java.io.IOException | IllegalArgumentException ignored) { /* Older/unsupported sources can still use the preview. */ }
+            finally { if (decoder != null) decoder.recycle(); }
+        }
+        return padded(image, area);
+    }
+    private static Bitmap padded(Bitmap image, Rect area) {
         float factor = Math.min(8f, Math.max(1f, 720f / Math.max(area.width(), area.height())));
         int w = Math.round(area.width() * factor), h = Math.round(area.height() * factor), padding = 24;
         Bitmap out = Bitmap.createBitmap(w + padding * 2, h + padding * 2, Bitmap.Config.ARGB_8888);
