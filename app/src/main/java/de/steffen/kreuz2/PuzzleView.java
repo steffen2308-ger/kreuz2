@@ -229,7 +229,6 @@ public final class PuzzleView extends View {
                     canvas.drawRect(l, t, right, bottom, paint);
                 }
                 if (!puzzle.letters[i].isEmpty()) {
-                    paint.setColor(0xefffffff); canvas.drawRect(l + 1, t + 1, right - 1, bottom - 1, paint);
                     paint.setColor(0xff073e55); paint.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
                     paint.setTextSize(Math.min(right - l, bottom - t) * .72f); paint.setTextAlign(Paint.Align.CENTER);
                     canvas.drawText(puzzle.letters[i], (l + right) / 2, (t + bottom) / 2 - (paint.ascent() + paint.descent()) / 2, paint);
