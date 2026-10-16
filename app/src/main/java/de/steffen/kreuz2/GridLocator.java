@@ -2,7 +2,6 @@ package de.steffen.kreuz2;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 
 /** Finds a mutually supported pair of periodic line families, then recovers missing borders. */
@@ -75,7 +74,7 @@ final class GridLocator {
         if (found.size() > 350) {
             Collections.sort(found, (a, b) -> Float.compare(b.strength, a.strength));
             found = new ArrayList<>(found.subList(0, 350));
-            Collections.sort(found, Comparator.comparingDouble(a -> a.position));
+            Collections.sort(found, (a, b) -> Float.compare(a.position, b.position));
         }
         return found;
     }
